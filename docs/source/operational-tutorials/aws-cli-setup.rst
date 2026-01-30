@@ -10,11 +10,10 @@ Official installation instructions
 
 The authoritative installation guides are maintained by AWS:
 
-- **AWS CLI**  
-  https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+- `AWS CLI <https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html>`_
 
-- **AWS ParallelCluster CLI**  
-  https://docs.aws.amazon.com/parallelcluster/latest/ug/install-v3-parallelcluster.html
+- `AWS ParallelCluster CLI <https://docs.aws.amazon.com/parallelcluster/latest/ug/install-v3-parallelcluster.html>`_
+
 
 These instructions should be consulted for platform-specific details and
 the most up-to-date guidance.

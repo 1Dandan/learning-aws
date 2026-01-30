@@ -51,8 +51,8 @@ Examples:
 Python tools for data transfer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Python package such as `boto3` for data downloading from S3 bucket. Example can be found 
-[here](https://github.com/geoschem/integrated_methane_inversion/blob/main/src/utilities/download_aws_file.py)
+Python package such as ``boto3`` for data downloading from S3 bucket. Example can be found 
+`here <https://github.com/geoschem/integrated_methane_inversion/blob/main/src/utilities/download_aws_file.py>`_
 
 
 Data repository association (DRA)

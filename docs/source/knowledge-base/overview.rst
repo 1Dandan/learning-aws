@@ -48,13 +48,16 @@ How this documentation is organized
 This documentation is organized to follow the mental model above:
 
 - **IAM identity**  
+  
   Explains where credentials come from and how identities are defined
 
 - **AWS APIs**  
+  
   Explains how permissions are evaluated and how to reason about allowed
   actions
 
 - **AWS services and resources**  
+  
   Explains what services exist and what concrete resources they manage
 
 The operational tutorials then build on this foundation to show how these
