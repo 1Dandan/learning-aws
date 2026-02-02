@@ -1,5 +1,3 @@
-.. _dra:
-
 Data transfer between FSx and S3 bucket
 =======================================
 
@@ -57,6 +55,8 @@ Python package such as ``boto3`` for data downloading from S3 bucket. Example ca
 `here <https://github.com/geoschem/integrated_methane_inversion/blob/main/src/utilities/download_aws_file.py>`_
 
 
+.. _dra:
+
 Data repository association (DRA)
 -------------------------------------
 
@@ -81,18 +81,22 @@ If these requirements are not met, DRA cannot be used.
 Create DRA association
 -----------------------
 
-DRA can be specified when :ref:`creating FSx file system through console <fsx-console>`.
+- Through console
 
-Alternatively, we can create DRA through CLI
+   DRA can be specified when :ref:`creating FSx file system through console <fsx-console>`.
 
-.. code-block:: bash
+- Through CLI
 
-  aws fsx create-data-repository-association \
-    --file-system-id fs-xxxxxxxx \
-    --file-system-path /fsx \
-    --data-repository-path s3://my-bucket/gchp-inputs \
-    --s3 AutoImportPolicy={Events=[NEW,CHANGED,DELETED]},AutoExportPolicy={Events=[NEW,CHANGED,DELETED]} \
-    --batch-import-meta-data-on-create
+   Alternatively, we can create DRA through CLI
+
+   .. code-block:: bash
+
+      aws fsx create-data-repository-association \
+         --file-system-id fs-xxxxxxxx \
+         --file-system-path /fsx \
+         --data-repository-path s3://my-bucket/gchp-inputs \
+         --s3 AutoImportPolicy={Events=[NEW,CHANGED,DELETED]},AutoExportPolicy={Events=[NEW,CHANGED,DELETED]} \
+         --batch-import-meta-data-on-create
 
 Notes
 ^^^^^
