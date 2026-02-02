@@ -1,3 +1,5 @@
+.. _dra:
+
 Data transfer between FSx and S3 bucket
 =======================================
 
@@ -75,6 +77,22 @@ DRA requires that:
 - The FSx file system and the S3 bucket are in the **same region**
 
 If these requirements are not met, DRA cannot be used.
+
+Create DRA association
+-----------------------
+
+DRA can be specified when :ref:`creating FSx file system through console <fsx-console>`.
+
+Alternatively, we can create DRA through CLI
+
+.. code-block:: bash
+
+  aws fsx create-data-repository-association \
+    --file-system-id fs-xxxxxxxx \
+    --file-system-path /fsx \
+    --data-repository-path s3://my-bucket/gchp-inputs \
+    --s3 AutoImportPolicy={Events=[NEW,CHANGED,DELETED]},AutoExportPolicy={Events=[NEW,CHANGED,DELETED]} \
+    --batch-import-meta-data-on-create
 
 Notes
 ^^^^^

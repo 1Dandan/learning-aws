@@ -1,5 +1,5 @@
 AWS setup at Harvard
-===================
+=====================
 
 .. toctree::
    :maxdepth: 2

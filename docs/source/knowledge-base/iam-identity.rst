@@ -1,5 +1,5 @@
 IAM identity
-============
+==============
 
 AWS credentials are derived from IAM identities, including IAM users and IAM
 roles.
@@ -31,7 +31,7 @@ IAM roles do not have long-lived credentials. Instead, temporary credentials
 are issued by AWS Security Token Service (STS) when the role is assumed.
 
 Assumed IAM role via Single Sign-On (SSO)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Single Sign-On (SSO) is a federated authentication mechanism used to log in to
 AWS via the link provided by HUIT.
@@ -109,21 +109,19 @@ Compute node IAM role
 Data access considerations
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-FSx access
-~~~~~~~~~~
+- **FSx access**
 
-FSx is a POSIX file system. Reading from and writing to FSx is handled at the
-OS and file-system level and does not involve AWS APIs.
+  FSx is a POSIX file system. Reading from and writing to FSx is handled at the
+  OS and file-system level and does not involve AWS APIs.
 
-Therefore, no special IAM permissions are required on the compute node IAM
-role for normal FSx file I/O.
+  Therefore, no special IAM permissions are required on the compute node IAM
+  role for normal FSx file I/O.
 
-S3 access
-~~~~~~~~~
+- **S3 access**
 
-Amazon S3 is an AWS-managed resource. Any data transfer between FSx and S3
-(for example, ``aws s3 cp`` or ``aws s3 sync``) is performed via AWS APIs.
+  Amazon S3 is an AWS-managed resource. Any data transfer between FSx and S3
+  (for example, ``aws s3 cp`` or ``aws s3 sync``) is performed via AWS APIs.
 
-Consequently, the compute node IAM role (or another EC2 instance role used
-for offline transfer) must include the appropriate S3 permissions to allow
-these operations.
+  Consequently, the compute node IAM role (or another EC2 instance role used
+  for offline transfer) must include the appropriate S3 permissions to allow
+  these operations.

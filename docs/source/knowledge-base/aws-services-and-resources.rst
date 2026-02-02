@@ -71,7 +71,7 @@ Relationship between region, VPC, subnet, and availability zone (AZ):
 - A VPC belongs to a specific region
 - A subnet is a slice of a VPC’s IP address space and is associated with a
   single Availability Zone (for example, ``us-east-1a``)
-- A VPC can contain many subnets
+- A VPC or AZ can contain many subnets
 
 An EC2 instance (such as a head node or compute node) is launched into a
 subnet and therefore physically resides in that subnet’s Availability Zone.

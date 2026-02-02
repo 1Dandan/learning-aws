@@ -1,8 +1,47 @@
+.. _fsx:
+
 Create FSx filesystem
 =====================
 
 This section describes how to create an Amazon FSx for Lustre file system,
 and how to mount it on an EC2 instance for use in computation workflows.
+
+There are two ways to create FSx filesystem to be used in ParallelCluster:
+
+- **Internal FSx**
+  
+  We can create an FSx using a pcluster creation yaml file, but
+  in that case the FSx would be tied to the pcluster, and we need to define ``DeletionPolicy``
+
+  .. code-block:: yaml
+
+    SharedStorage:
+      - Name: fsx-lustre
+        StorageType: FsxLustre
+        MountDir: /fsx
+        DeletionPolicy: Retain
+        FsxLustreSettings:
+          DeploymentType: SCRATCH_2
+
+- **External FSx** (Recommended)
+  
+  We create an FSx filesystem first and ParallelCluster just mounts the existing FSx. 
+  ParallelCluster will not delete it as it is external.
+
+  Mounting can be specified in the ParallelCluster creation yaml file:
+
+  .. code-block:: yaml
+
+    SharedStorage:
+      - MountDir: /ExtData # The desired mount point
+        Name: fsx # The key name for the existing FSx file system
+        StorageType: FsxLustre # Or FsxOntap, FsxOpenZfs
+        FsxLustreSettings:
+          FileSystemId: fs-XXXXXXXXXXXXXXXXX # Replace with your actual File System ID
+
+  The creation (AWS APIs) can be called through AWS console or CLI.
+
+.. _fsx-console:
 
 Create FSx through AWS Console
 ---------------------------------
@@ -36,7 +75,7 @@ When creating the file system, specify the following:
 
 - **Data repository import/export**  
   
-  This option enables data synchronization between S3 and FSx through **data repository association (DRA)**.
+  This option enables data synchronization between S3 and FSx through :ref:`data repository association (DRA) <dra>`.
 
 Creation may take some time to complete.
 
@@ -50,15 +89,48 @@ To delete an FSx file system:
 - Choose **Actions → Delete file system**
 
 
-Useful commands
--------------------
+Create FSx through AWS CLI
+---------------------------------
 
-Describe FSx file systems using the AWS CLI:
+We can also use AWS CLI for reproducibility and automation. 
+
+The above creation example can be achieved by AWS CLI:
 
 .. code-block:: bash
 
-   aws fsx describe-file-systems \
-     --file-system-ids <file_system_id1> <file_system_id2> ...
+  aws fsx create-file-system \
+    --file-system-type LUSTRE \
+    --storage-capacity 1200 \
+    --subnet-ids subnet-xxxxxxxx \
+    --security-group-ids sg-xxxxxxxx \
+    --lustre-configuration DeploymentType=SCRATCH_2 \
+    --tags Key=Name,Value=gchp-fsx-scratch
+
+
+And then we can monitor the creation process by:
+
+.. code-block:: bash
+
+  aws fsx describe-file-systems \
+    --query 'FileSystems[*].{ID:FileSystemId,State:Lifecycle,MountName:LustreConfiguration.MountName}'
+
+
+Wait until: ``Lifecycle = AVAILABLE``
+
+
+We can delete an FSx system by:
+
+.. code-block:: bash
+
+  aws fsx delete-file-system \
+    --file-system-id fs-xxxxxxxx
+
+Verification of the deletion:
+
+.. code-block:: bash
+  
+  aws fsx describe-file-systems \
+    --file-system-ids fs-xxxxxxxx
 
 
 Mount FSx to an EC2 instance

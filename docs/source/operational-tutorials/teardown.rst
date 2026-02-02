@@ -1,5 +1,5 @@
 Teardown and cleanup
-===================
+======================
 
 Always delete unused resources to avoid charges.
 
