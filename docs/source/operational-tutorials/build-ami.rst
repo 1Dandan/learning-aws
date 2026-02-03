@@ -1,11 +1,11 @@
-Creating Amazon Machine Image
-=============================
+Build a custom Amazon Machine Image
+=====================================
 
 An Amazon Machine Image (AMI) defines the software environment used by EC2
 instances. It contains the operating system, libraries, and tools required for
 workflows such as GCHP simulations and Python-based analysis.
 
-Create AMI from AWS Console
+Build AMI from AWS Console
 -------------------------------
 
 Launch an EC2 instance using a default AMI provided by Amazon with your
@@ -17,18 +17,18 @@ SSH into the instance:
 
    ssh -i <key_pair_path> <os_login_name>@<public_ip_address>
 
-Notes:
+.. note::
 
-- ``os_login_name`` depends on the operating system.
-  For example:
+  - ``os_login_name`` depends on the operating system.
+    For example:
 
-  - ``ec2-user`` for Amazon Linux
-  - ``ubuntu`` for Ubuntu
+    - ``ec2-user`` for Amazon Linux
+    - ``ubuntu`` for Ubuntu
 
-  (google search for confirmation)
+    (google search for confirmation)
 
-- ``public_ip_address`` is the public IPv4 address shown in the AWS console
-  for the EC2 instance.
+  - ``public_ip_address`` is the public IPv4 address shown in the AWS console
+    for the EC2 instance.
 
 Install required libraries
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -55,117 +55,110 @@ Build AMI with ParallelCluster based on an existing AMI
 Prerequisites
 ^^^^^^^^^^^^^^^^^^^
 
-IAM permissions
-~~~~~~~~~~~~~~~
+- IAM permissions
 
-To build an AMI using ParallelCluster, the IAM user or role must include the
-following permissions:
+  To build an AMI using ParallelCluster, the IAM user or role must include the
+  following permissions:
 
-- ``AWSLambda_FullAccess``
-- ``AmazonSNSFullAccess``
+  - ``AWSLambda_FullAccess``
+  - ``AmazonSNSFullAccess``
 
-These permissions are required for image build workflows.
+  These permissions are required for image build workflows.
 
-Check OS version
-~~~~~~~~~~~~~~~~
+- Check OS version
 
-When SSHing into an EC2 instance launched from the parent AMI, check the OS
-version:
+  When SSHing into an EC2 instance launched from the parent AMI, check the OS
+  version:
 
-.. code-block:: bash
+  .. code-block:: bash
 
-   cat /etc/os-release
+    cat /etc/os-release
 
-The value of ``Image.Os`` used later must correspond to the operating system
-version of the parent AMI.
+  The value of ``Image.Os`` used later must correspond to the operating system
+  version of the parent AMI.
 
-Rules and supported values can be found at:
+  Rules and supported values can be found at:
 
-https://docs.aws.amazon.com/parallelcluster/latest/ug/Image-v3.html
+  https://docs.aws.amazon.com/parallelcluster/latest/ug/Image-v3.html
 
-For Ubuntu 24.04, use ``ubuntu2404`` 
-as the ``Image.Os`` value.
+  For Ubuntu 24.04, use ``ubuntu2404`` 
+  as the ``Image.Os`` value.
 
 Build process
--------------------
+^^^^^^^^^^^^^^^^^^^
 
-Create a configuration YAML file for image building
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Create a configuration YAML file for image building
 
-Subnet requirements
-~~~~~~~~~~~~~~~~~~~
+  - Subnet requirements
 
-- The subnet ID must be in the **same region** (for example, ``us-east-1``)
-  as the parent AMI.
-- The subnet must have **internet egress** (via an Internet Gateway or NAT)
-  so the build process can install and configure required components.
-
-VPC note
-~~~~~~~~
-
-It is not necessary to explicitly specify a VPC, since each subnet belongs
-to exactly one VPC.
-
-Example ``image-build.yaml``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: yaml
-
-   Region: us-east-1
-
-   Image:
-     Name: gchp-imi-pcluster-base-v202601
-
-   Build:
-     ParentImage: ami-0f25a533d0bc938a8   # existing AMI
-     InstanceType: t3.large
-     SubnetId: subnet-3198906c            # any suitable public subnet
-     SecurityGroupIds:
-       - sg-0b7fdbbcb20e53b4e
-     UpdateOsPackages:
-       Enabled: true
+    - The subnet ID must be in the **same region** (for example, ``us-east-1``)
+      as the parent AMI.
+    - The subnet must have **internet egress** (via an Internet Gateway or NAT)
+      so the build process can install and configure required components.
 
 
-Run the image build
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+    .. note::
 
-Run the build using the ParallelCluster CLI:
+      It is not necessary to explicitly specify a VPC, since each subnet belongs
+      to exactly one VPC.
 
-.. code-block:: bash
+    Example ``image-build.yaml``
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   pcluster build-image \
-     -c <image-config.yaml> \
-     -i <image_id>
+    .. code-block:: yaml
 
-Notes:
+      Region: us-east-1
 
-- The ``-i <image_id>`` argument is still required.
-- ``<image_id>`` can be the same string as the image name defined in
-  ``image-build.yaml``.
+      Image:
+        Name: gchp-imi-pcluster-base-v202601
 
-Monitor build progress
-^^^^^^^^^^^^^^^^^^^^^^
-
-Check the image build status using:
-
-.. code-block:: bash
-
-   pcluster describe-image \
-     -i gchp-imi-pcluster-base-v1 \
-     -r us-east-1 \
-     --query "imageBuildStatus"
+      Build:
+        ParentImage: ami-0f25a533d0bc938a8   # existing AMI
+        InstanceType: t3.large
+        SubnetId: subnet-3198906c            # any suitable public subnet
+        SecurityGroupIds:
+          - sg-0b7fdbbcb20e53b4e
+        UpdateOsPackages:
+          Enabled: true
 
 
-Debug build failure
-------------------------
+- Run the image build
 
-If the image build fails, detailed error messages can be retrieved using
-AWS CloudFormation:
+  Run the build using the ParallelCluster CLI:
 
-.. code-block:: bash
+  .. code-block:: bash
 
-   aws cloudformation describe-stack-events \
-     --region us-east-1 \
-     --stack-name gchp-imi-pcluster-base-v1 \
-     --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[Timestamp,LogicalResourceId,ResourceType,ResourceStatusReason]" \
-     --output table
+    pcluster build-image \
+      -c <image-config.yaml> \
+      -i <image_id>
+
+  .. note::
+
+    - The ``-i <image_id>`` argument is still required.
+    - ``<image_id>`` can be the same string as the image name defined in
+      ``image-build.yaml``.
+
+- Monitor build progress
+
+  Check the image build status using:
+
+  .. code-block:: bash
+
+    pcluster describe-image \
+      -i gchp-imi-pcluster-base-v1 \
+      -r us-east-1 \
+      --query "imageBuildStatus"
+
+
+- Debug build failure
+
+  If the image build fails, detailed error messages can be retrieved using
+  AWS CloudFormation:
+
+  .. code-block:: bash
+
+    aws cloudformation describe-stack-events \
+      --region us-east-1 \
+      --stack-name gchp-imi-pcluster-base-v1 \
+      --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[Timestamp,LogicalResourceId,ResourceType,ResourceStatusReason]" \
+      --output table

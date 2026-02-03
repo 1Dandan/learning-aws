@@ -1,7 +1,7 @@
 .. _fsx:
 
-Create FSx filesystem
-=====================
+Create a FSx filesystem
+==========================
 
 This section describes how to create an Amazon FSx for Lustre file system,
 and how to mount it on an EC2 instance for use in computation workflows.
@@ -50,9 +50,9 @@ Log in to the AWS Management Console.
 
 In the console search bar:
 
-- Search for **FSx**
-- Select **Create file system**
-- Choose **Amazon FSx for Lustre**
+  - Search for **FSx**
+  - Select **Create file system**
+  - Choose **Amazon FSx for Lustre**
 
 Specify file system details
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -159,7 +159,7 @@ Prerequisites
 
   - Verify Lustre installation
 
-    Lustre client utilities are often installed by default. Verify by running:
+    Lustre client utilities are often installed by default. Verify by running either one of:
 
     .. code-block:: bash
 

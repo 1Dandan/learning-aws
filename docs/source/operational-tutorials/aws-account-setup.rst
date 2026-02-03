@@ -98,25 +98,24 @@ Provide the following information when prompted:
 - **Default output format**  
   ``json``
 
-Notes
-^^^^^
+.. note::
 
-- ``aws configure`` writes config and credentials to:
+  - ``aws configure`` writes config and credentials to:
 
-  - ``~/.aws/config``
-  - ``~/.aws/credentials``
+    - ``~/.aws/config``
+    - ``~/.aws/credentials``
 
-- Additional IAM user credentials can be added later by editing
-  ``~/.aws/credentials`` directly.
+  - Additional IAM user credentials can be added later by editing
+    ``~/.aws/credentials`` directly.
 
-- When using the AWS CLI, a specific credential profile can be selected with:
+  - When using the AWS CLI, a specific credential profile can be selected with:
 
-  .. code-block:: bash
+    .. code-block:: bash
 
-     --profile <credential_name>
+      --profile <credential_name>
 
-- The credential name does not need to match the IAM user name. It is defined
-  in ``~/.aws/credentials``.
+  - The credential name does not need to match the IAM user name. It is defined
+    in ``~/.aws/credentials``.
 
 
 (Advanced / emergency) Temporary admin IAM user
@@ -176,10 +175,6 @@ Detach an IAM permission policy directly attached to a user:
      --profile <admin_name> \
      --policy-arn <POLICY_ARN>
 
-Notes:
-
-- IAM policies attached **through a user group** (for example,
-  ``LAE-gcst-policy-group``) cannot be detached from the user directly.
 - Inline policies can be deleted using:
 
   .. code-block:: bash
@@ -187,6 +182,11 @@ Notes:
      aws iam delete-user-policy \
        --user-name <user_name> \
        --policy-name <policy_name>
+
+.. note::
+
+  - IAM policies attached **through a user group** (for example,
+    ``LAE-gcst-policy-group``) cannot be detached from the user directly.
 
 
 Deactivate access key for admin IAM user
