@@ -69,7 +69,8 @@ When creating the file system, specify the following:
 
 - **Network and security**  
   
-  - You may use default settings initially.
+  - You may use ``benchmarks-cloud-vpc`` for VPC and ``benchmarks-cloud-sg`` for security group initially, 
+    which contains proper traffic for accessing Lustre. Subnet can leave as default.
   - The FSx file system and any EC2 instances that mount it must be in the **same VPC**.
   - The associated security group must allow **TCP port 988** (Lustre).
 
@@ -77,7 +78,7 @@ When creating the file system, specify the following:
   
   This option enables data synchronization between S3 and FSx through :ref:`data repository association (DRA) <dra>`.
 
-Creation may take some time to complete.
+Creation may take some time (~7 mins) to complete.
 
 Delete FSx
 ^^^^^^^^^^
@@ -125,90 +126,122 @@ We can delete an FSx system by:
   aws fsx delete-file-system \
     --file-system-id fs-xxxxxxxx
 
-Verification of the deletion:
+Monitoring the deletion process:
 
 .. code-block:: bash
   
   aws fsx describe-file-systems \
     --file-system-ids fs-xxxxxxxx
 
+Printing ``Lifecycle = DELETING``
+
+Once it was deleted, you should see non-existing error from above command.
 
 Mount FSx to an EC2 instance
 --------------------------------
 
-Launch an EC2 instance
+Prerequisites
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Launch an EC2 instance with:
+- Launch an EC2 instance with:
 
-- The **same VPC** (and usually the same subnet) as the FSx file system
-- A security group that allows **TCP port 988 (Lustre)**
+  - The **same VPC** (and usually the same subnet) as the FSx file system
+  - A security group that allows **TCP port 988 (Lustre)**
 
-Lustre client utilities
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Lustre client version on the EC2 instance must match the FSx server’s
-supported client ABI.
+- Lustre client utilities
 
-In practice, this means using the same Lustre **major/minor series**
-(for example, ``2.10 ↔ 2.10`` or ``2.15 ↔ 2.15``).
+  The Lustre client version on the EC2 instance must match the FSx server’s
+  supported client ABI.
 
-Verify Lustre installation
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+  In practice, this means using the same Lustre **major/minor series**
+  (for example, ``2.10 ↔ 2.10`` or ``2.15 ↔ 2.15``).
 
-Lustre client utilities are often installed by default. Verify by running:
+  - Verify Lustre installation
 
-.. code-block:: bash
+    Lustre client utilities are often installed by default. Verify by running:
 
-   lfs --version
-   lctl --version
-   modinfo lustre
+    .. code-block:: bash
 
-Install Lustre client on Ubuntu (if not installed)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      lfs --version
+      lctl --version
+      modinfo lustre
 
-If Lustre is not installed, install it on Ubuntu using:
+  - Install Lustre client on Ubuntu (if not installed)
 
-.. code-block:: bash
+    If Lustre is not installed, install it on Ubuntu using:
 
-   sudo apt update
-   sudo apt install -y \
-     linux-image-$(uname -r) \
-     lustre-client-modules-$(uname -r) \
-     lustre-client-utils
-   sudo modprobe lustre
+    .. code-block:: bash
+
+      sudo apt update
+      sudo apt install -y \
+        linux-image-$(uname -r) \
+        lustre-client-modules-$(uname -r) \
+        lustre-client-utils
+      sudo modprobe lustre
 
 
 Mounting FSx to EC2 instance
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Create a mount point (the directory name is arbitrary):
+- Create a mount point (the directory name is arbitrary)
+
+  .. code-block:: bash
+
+    sudo mkdir -p /fsx
+
+- Mount the FSx file system
+
+  .. code-block:: bash
+
+    sudo mount -t lustre -o relatime,flock \
+      <fsx-dns-name>@tcp:/<fsx-mount-name> \
+      <local-mount-point>
+
+  For example:
+
+  .. code-block:: bash
+
+    sudo mount -t lustre -o relatime,flock \
+      fs-0123456789abcdef.fsx.us-east-1.amazonaws.com@tcp:/fsx \
+      /fsx
+
+- Debug mount failure
+
+  If mounting fails, check the kernel messages immediately after the failure:
+
+  .. code-block:: bash
+
+    sudo dmesg | egrep -i 'lustre|lnet|mgc|lmgs' | tail -n 60
+
+
+Change the ownership for writing permission (FSx for output data)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- By default, the root directory of a newly created FSx file system is owned by ``root:root``.
+- The default permissions allow read access, so the filesystem can be used directly for read-only input data (e.g., ``/ExtData``).
+- To allow non-root write access (for example, from ``ParallelCluster`` compute jobs), 
+  we change the ownership of the filesystem root (or a designated output directory) to **a regular Linux user** (e.g. ``ubuntu``).
+- After an FSx file system is mounted on an EC2 instance, 
+  changing ownership or permissions on the mount point modifies the FSx file system itself, 
+  and the changes persist across future mounts and clusters.
+- **Special case Data Repository Association (DRA)**:
+  When data is imported from S3 to FSx using DRA, 
+  the files and directories created on FSx are owned by ``root:root``. 
+  This is expected behavior, because the transfer is performed by the FSx service rather than a Linux user.
+- When data is transferred from S3 to FSx using ``aws s3 sync`` or ``aws s3 cp`` on an EC2 instance, 
+  the files are created by the Linux process running on that instance and therefore inherit the ownership of the regular Linux user, 
+  subject to the permissions of the parent directory.
+
+We can change the ownership and permissions by:
 
 .. code-block:: bash
 
-   sudo mkdir -p /fsx
+  # os-login-name depends on the OS, e.g. ubuntu for Ubuntu, ec2-user for Amazon Linux, etc.
+  sudo chown <os-login-name>:<os-login-name> <local-mount-point>
+  sudo chmod 2775 <local-mount-point>
 
-Mount the FSx file system:
+.. note::
 
-.. code-block:: bash
-
-   sudo mount -t lustre -o relatime,flock \
-     <fsx-dns-name>@tcp:/<fsx-mount-name> \
-     <local-mount-point>
-
-For example:
-
-.. code-block:: bash
-
-   sudo mount -t lustre -o relatime,flock \
-     fs-0123456789abcdef.fsx.us-east-1.amazonaws.com@tcp:/fsx \
-     /fsx
-
-Debug mount failure
-~~~~~~~~~~~~~~~~~~~
-
-If mounting fails, check the kernel messages immediately after the failure:
-
-.. code-block:: bash
-
-   sudo dmesg | egrep -i 'lustre|lnet|mgc|lmgs' | tail -n 60
+  We need to modify these after successful mounting, 
+  so that changes are applied to the FSx file system itself, not the local mounting point.

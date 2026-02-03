@@ -90,7 +90,6 @@ Example template (Slurm + FSx for Lustre)
        SubnetId: <subnet-id>                 # e.g., subnet-xxxxxxxx
      Ssh:
        KeyName: <ec2-keypair-name>           # name of the EC2 key pair (not a local filename)
-     # Optional: attach IAM policies/roles are typically managed by the account admins
 
    Scheduling:
      Scheduler: slurm
@@ -106,23 +105,13 @@ Example template (Slurm + FSx for Lustre)
          Networking:
            SubnetIds:
              - <subnet-id>                   # often same as HeadNode subnet
-         # Optional: custom AMI is inherited from Image.CustomAmi unless overridden
 
    SharedStorage:
-     # Option A: Use an existing FSx for Lustre filesystem (recommended when you already created FSx)
      - Name: fsx
        StorageType: FsxLustre
        MountDir: /fsx
        FsxLustreSettings:
          FileSystemId: <fsx-filesystem-id>   # e.g., fs-0123456789abcdef0
-
-     # Option B (alternative): Use EBS as shared storage (not a Lustre filesystem)
-     # - Name: shared-ebs
-     #   StorageType: Ebs
-     #   MountDir: /shared
-     #   EbsSettings:
-     #     VolumeType: gp3
-     #     Size: 200
 
 Common placeholders
 ^^^^^^^^^^^^^^^^^^^
