@@ -107,11 +107,18 @@ Example template (Slurm + FSx for Lustre)
              - <subnet-id>                   # often same as HeadNode subnet
 
    SharedStorage:
-     - Name: fsx
+     - Name: fsx                             # Arbitraty, just a logical label for the FSx file system
        StorageType: FsxLustre
-       MountDir: /fsx
+       MountDir: /fsx                        # local mounting point
        FsxLustreSettings:
          FileSystemId: <fsx-filesystem-id>   # e.g., fs-0123456789abcdef0
+
+
+.. note::
+
+  We do not need to specify FSx DNS name and Lustre mount name 
+  under ``SharedStorage`` in the config file when creating a ParallelCluster.
+  All of that is automatically derived by ParallelCluster from the FSx ``FileSystemId``.
 
 Common placeholders
 ^^^^^^^^^^^^^^^^^^^

@@ -103,7 +103,6 @@ Build process
       to exactly one VPC.
 
     Example ``image-build.yaml``
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     .. code-block:: yaml
 
