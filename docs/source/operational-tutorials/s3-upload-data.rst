@@ -29,6 +29,9 @@ Upload Input Data Using Python Scripts (Recommended)
 
 - There is **no data transferring fee** if the two S3 buckets are in the **same region** 
   with only tiny S3 bucket request fee!
+- There is storage fee associated with a copied S3 bucket, 
+  but the cost is much cheaper than FSx for Lustre and compute cost, see :ref:`pricing <pricing>`
+
 - We first transfer data to S3 in the same AWS account and then we can utilize :ref:`DRA <dra>` to 
   facilitate super fast transferring from S3 to FSx (much faster than ``aws s3 sync``)
 - All input data is available in S3 bucket(s), we can copy data in-between S3 buckets.

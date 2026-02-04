@@ -30,6 +30,7 @@ AWS setup at Harvard
    :maxdepth: 2
    :caption: Resources
 
-   resources/reference-links
    resources/templates
+   resources/pricing
+   resources/reference-links
    
