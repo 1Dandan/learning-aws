@@ -24,7 +24,7 @@ Before uploading data to S3, ensure that:
     - AWS CLI is installed and configured if using command-line methods
 
 
-Method 1: Upload Data Using Python Scripts (Recommended)
+Upload Input Data Using Python Scripts (Recommended)
 -----------------------------------------------------------
 
 - All input data is available in S3 bucket(s), we can copy data in-between S3 buckets.
@@ -54,7 +54,7 @@ Check the bucket region by::
     For example, the bucket name is ``gcgrid`` instead of ``gcgrid (us-east-1)``
 
 Helper scripts tutorials
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - For GEOS-Chem input data
 
@@ -133,8 +133,40 @@ Helper scripts tutorials
 
   If you are satisfied with the dryrun output, just remove ``--dryrun`` for a real copy
 
-Method 2: Upload Data Using AWS CLI
+
+Upload Output Data from FSx for Lustre (Best for Large Outputs)
+-------------------------------------------------------------------
+
+When using FSx for Lustre with an S3 Data Repository Association (DRA),
+data written to FSx can be automatically synchronized to S3.
+
+Typical workflow::
+
+  /fsx/
+  └── output/
+      └── Test_Global_1day_c36s10/
+
+With DRA configured:
+
+  - Files written to FSx appear in the associated S3 bucket
+  - No explicit ``aws s3 cp`` command is required
+
+This method is recommended for:
+
+  - Large-scale model output
+  - ParallelCluster workflows
+  - Repeated data transfers
+
+.. note::
+
+  FSx and S3 must be in the same AWS account and region for DRA to work.
+
+
+Other Official Methods
 -------------------------------------------------
+
+Upload Data Using AWS CLI
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The AWS CLI is the preferred method for uploading data in most research and
 HPC workflows. It is scriptable, restartable, and suitable for large datasets.
@@ -183,35 +215,8 @@ Advantages of ``sync``:
     - Safe for repeated execution
     - Ideal for incremental model outputs
 
-
-Method 3: Upload Data from FSx for Lustre (Best for Large Outputs)
--------------------------------------------------------------------
-
-When using FSx for Lustre with an S3 Data Repository Association (DRA),
-data written to FSx can be automatically synchronized to S3.
-
-Typical workflow::
-
-  /fsx/
-  └── output/
-      └── Test_Global_1day_c36s10/
-
-With DRA configured:
-- Files written to FSx appear in the associated S3 bucket
-- No explicit ``aws s3 cp`` command is required
-
-This method is recommended for:
-- Large-scale model output
-- ParallelCluster workflows
-- Repeated data transfers
-
-.. note::
-
-  FSx and S3 must be in the same AWS account and region for DRA to work.
-
-
-Method 4: Upload Data Using AWS Management Console
---------------------------------------------------
+Upload Data Using AWS Management Console
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This method is suitable only for small files or one-off uploads.
 
