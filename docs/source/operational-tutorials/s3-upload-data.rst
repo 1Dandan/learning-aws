@@ -27,8 +27,11 @@ Before uploading data to S3, ensure that:
 Upload Input Data Using Python Scripts (Recommended)
 -----------------------------------------------------------
 
+- There is **no data transferring fee** if the two S3 buckets are in the **same region** 
+  with only tiny S3 bucket request fee!
+- We first transfer data to S3 in the same AWS account and then we can utilize :ref:`DRA <dra>` to 
+  facilitate super fast transferring from S3 to FSx (much faster than ``aws s3 sync``)
 - All input data is available in S3 bucket(s), we can copy data in-between S3 buckets.
-
 - List of source bucket name for input data
 
 =========================== ========================================= ========================
@@ -45,16 +48,12 @@ Check the bucket region by::
 
 .. note::
 
-  - There is **no data transferring fee** if the two S3 buckets are in the **same region** 
-    with only tiny S3 bucket request fee!
-  - We first transfer data to S3 in the same AWS account and then we can utilize :ref:`DRA <dra>` to 
-    facilitate super fast transferring from S3 to FSx (much faster than ``aws s3 sync``)
-  - You need to run the helper scripts with your AWS credential
+  - You need to run the helper scripts to download inputs with your AWS credential
   - The region is listed in the bracket adjacent to S3 bucket name. 
     For example, the bucket name is ``gcgrid`` instead of ``gcgrid (us-east-1)``
 
-Helper scripts tutorials
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+Downloading scripts tutorials
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - For GEOS-Chem input data
 
