@@ -1,3 +1,5 @@
+.. _aws-configure:
+
 AWS account setup
 =================
 

@@ -1,3 +1,5 @@
+.. _aws-cli-install:
+
 AWS utilities
 ====================================
 

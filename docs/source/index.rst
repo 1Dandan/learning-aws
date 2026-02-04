@@ -19,6 +19,8 @@ AWS setup at Harvard
    operational-tutorials/aws-cli-setup
    operational-tutorials/aws-account-setup
    operational-tutorials/build-ami
+   operational-tutorials/s3-create-bucket
+   operational-tutorials/s3-upload-data
    operational-tutorials/fsx-create
    operational-tutorials/fsx-s3-dra
    operational-tutorials/pcluster-create
