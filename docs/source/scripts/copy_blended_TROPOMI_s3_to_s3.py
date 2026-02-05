@@ -111,7 +111,13 @@ def copy_blended_date_range(start_date: datetime,
             continue
 
         for src_key in keys:
-            dst_key = f"{dst_prefix}{src_key}" if dst_prefix else src_key
+            filename = os.path.basename(src_key)
+
+            # Ensure dst_prefix ends with "/"
+            if dst_prefix and not dst_prefix.endswith("/"):
+                dst_prefix = dst_prefix + "/"
+
+            dst_key = f"{dst_prefix}{filename}"
             all_tasks.append((src_bucket, src_key, dst_bucket, dst_key, dry_run))
 
     print("=============Copying S3 -> S3 (date-filtered)=============")

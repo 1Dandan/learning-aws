@@ -128,9 +128,9 @@ Downloading scripts tutorials
     Dest:   s3://dzhang-imi-gchp-test/blended-tropomi/
     Files matched: 15
     [DRYRUN] copy s3://blended-tropomi-gosat-methane/data/2024-05/
-    S5P_BLND_L2__CH4____20240501T014225_20240501T032355_33932_03_020600_20240918T125812.nc 
-    -> s3://dzhang-imi-gchp-test/blended-tropomi/data/2024-05/
-    S5P_BLND_L2__CH4____20240501T014225_20240501T032355_33932_03_020600_20240918T125812.nc
+    S5P_BLND_L2__CH4____20240501T115126_20240501T133256_33938_03_020600_20240918T125812.nc 
+    -> s3://dzhang-imi-gchp-test/blended-tropomi/
+    S5P_BLND_L2__CH4____20240501T115126_20240501T133256_33938_03_020600_20240918T125812.nc
     ...
     Done. Success: 15, Failed: 0
 
