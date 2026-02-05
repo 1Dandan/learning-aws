@@ -22,7 +22,8 @@ AWS setup at Harvard
    operational-tutorials/s3-create-bucket
    operational-tutorials/s3-upload-data
    operational-tutorials/fsx-create
-   operational-tutorials/fsx-s3-dra
+   operational-tutorials/fsx-upload-data
+   operational-tutorials/fsx-s3-data-management
    operational-tutorials/pcluster-create
    operational-tutorials/teardown
 

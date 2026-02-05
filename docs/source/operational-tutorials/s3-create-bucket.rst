@@ -27,6 +27,7 @@ Method 1: Create an S3 Bucket via AWS Management Console
 
 This method is recommended for first-time users or one-off bucket creation.
 
+
 Step 1: Open the S3 Console
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -42,7 +43,7 @@ Step 2: Configure Bucket Settings
   
   - Must be globally unique across all AWS accounts
   - Use lowercase letters, numbers, and hyphens only
-  - Example: ``imi-gchp-test``
+  - Example: ``dzhang-imi-gchp-test``
 
 - All others can be left as default
 
@@ -70,7 +71,7 @@ Step 2: Create the Bucket
   .. code-block:: bash
 
     aws s3api create-bucket \
-        --bucket imi-gchp-test \
+        --bucket dzhang-imi-gchp-test \
         --region us-east-1
 
 - **For any other region**:
@@ -82,9 +83,47 @@ Step 2: Create the Bucket
         --region us-west-2 \
         --create-bucket-configuration LocationConstraint=us-west-2
 
+.. _fsx_s3_perm:
+
+Add FSx access to allow for DRA
+---------------------------------
+
+1. Go to the S3 bucket to be linked
+2. Click the **Permissions** tab → **Bucket policy**
+3. Edit and paste the following (replace ``<your_bucket_name>``) and then save changes.
+
+.. code-block:: json
+
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "AllowFSxListBucket",
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "fsx.amazonaws.com"
+        },
+        "Action": "s3:ListBucket",
+        "Resource": "arn:aws:s3:::<your_bucket_name>"
+      },
+      {
+        "Sid": "AllowFSxReadWriteObjects",
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "fsx.amazonaws.com"
+        },
+        "Action": [
+          "s3:GetObject",
+          "s3:PutObject"
+        ],
+        "Resource": "arn:aws:s3:::<your_bucket_name>/*"
+      }
+    ]
+  }
+
 .. note::
 
-    To set up :ref:`DRA <dra>`, we need to have S3 and FSx in the **same region**
+  To set up :ref:`DRA <dra>`, we need to have S3 and FSx in the **same region**
 
 
 Verification

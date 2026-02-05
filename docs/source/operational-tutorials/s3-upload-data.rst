@@ -28,7 +28,7 @@ Upload Input Data Using Python Scripts (Recommended)
 -----------------------------------------------------------
 
 - There is **no data transferring fee** if the two S3 buckets are in the **same region** 
-  with only tiny S3 bucket request fee!
+  with only tiny S3 bucket request fee.
 - There is storage fee associated with a copied S3 bucket, 
   but the cost is much cheaper than FSx for Lustre and compute cost, see :ref:`pricing <pricing>`
 
@@ -51,7 +51,8 @@ Check the bucket region by::
 
 .. note::
 
-  - You need to run the helper scripts to download inputs with your AWS credential
+  - You need to run the helper scripts to download inputs with AWS credential 
+    either through IAM user credential or assumed credential from an EC2 instance
   - The region is listed in the bracket adjacent to S3 bucket name. 
     For example, the bucket name is ``gcgrid`` instead of ``gcgrid (us-east-1)``
 
@@ -266,6 +267,51 @@ To verify uploaded objects::
 To recursively list contents::
 
   aws s3 ls s3://my-bucket/path/ --recursive
+
+
+.. note::
+
+  - Although S3 paths resemble Linux directories, S3 is not a filesystem:
+    operations such as ``mv`` or ``rename`` rewrite object keys rather than
+    modifying directory metadata.
+  - Always include the trailing ``/`` when operating on a “folder”.
+    The trailing ``/`` tells the AWS CLI to treat the path as a *prefix* rather
+    than a single object. Without it, the command applies only to the object
+    with that exact key, not to everything under the prefix.
+  - When applying an operation to all objects under a prefix, also include
+    ``--recursive``; otherwise, the command will not descend into the
+    pseudo-directory.
+
+Checking S3 Bucket Size (for FSx Planning)
+--------------------------------------------------------
+
+Before importing data from S3 into FSx, determine the **total logical size**
+of the S3 bucket or prefix. This value should be used to size FSx storage.
+
+Use the AWS CLI (recommended):
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+  aws s3 ls s3://dzhang-imi-gchp-test --recursive --summarize \
+    | awk '/Total Size/ {printf "%.2f GB\n", $3/1024/1024/1024}' 
+
+To check the size of a specific prefix (useful when multiple DRAs are used):
+
+.. code-block:: bash
+
+  aws s3 ls s3://dzhang-imi-gchp-test/ExtData --recursive --summarize \
+    | awk '/Total Size/ {printf "%.2f GB\n", $3/1024/1024/1024}'
+  aws s3 ls s3://dzhang-imi-gchp-test/blended-tropomi --recursive --summarize \
+    | awk '/Total Size/ {printf "%.2f GB\n", $3/1024/1024/1024}'
+  
+
+Use the AWS console:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+1. Go to your S3 bucket
+2. Click on **Metrics** tab
+3. Check **Total bucket size**
 
 
 Notes and Best Practices
