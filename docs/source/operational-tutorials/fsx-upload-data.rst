@@ -155,6 +155,90 @@ Verify DRA exists
     IAM role has permission to ``s3:GetObject``, ``s3:PutObject``, and
     ``s3:ListBucket`` on the **linked S3 bucket or prefix**.
 
+Import and Export Semantics of DRA
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A Data Repository Association (DRA) does **not** provide real-time or
+bidirectional synchronization between FSx and S3. Instead, it implements
+**directional, policy-driven, and largely lazy data movement**.
+
+Understanding these semantics is critical when using FSx scratch file systems.
+
+FSx → S3 (Export Semantics)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- **One-time export required for pre-existing data**
+
+  Files that already exist in FSx **before** the DRA is created are **not**
+  exported automatically. A one-time export task is required to establish
+  a baseline copy in S3.
+
+- **Auto-export (after DRA creation)**
+
+  When auto-export is enabled:
+
+  - Newly created or modified files in FSx are **automatically exported** to S3
+  - The **full file contents** (not only metadata) are written to S3
+  - Export occurs **asynchronously** but usually within minutes
+
+- **Deletion behavior**
+
+  - Deleting a file in FSx **does not delete** the corresponding object in S3
+  - S3 is treated as durable, append-oriented storage
+
+S3 → FSx (Import Semantics)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- **Fully lazy import model**
+
+  With auto-import enabled:
+
+  - Files stored in S3 (created **before or after** the DRA) are **not**
+    proactively copied to FSx
+  - **Both metadata and file contents** are imported **only when the file is
+    accessed** (e.g., ``ls``, ``stat``, file open, or model read)
+
+- **Access-triggered behavior**
+
+  On **first access** to a given file from FSx:
+
+  - File metadata is imported into the FSx namespace
+  - File data blocks are downloaded on demand
+  - Subsequent accesses to the same file reuse the cached data and do not
+    require re-downloading, unless the cache is evicted or the file changes
+
+- **Manual import tasks (optional)**
+
+  Manual import tasks may be used to pre-populate directory structure and
+  metadata, but file contents are still fetched lazily unless a full import
+  is explicitly requested.
+
+Behavior summary
+~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 30 35 35
+   :header-rows: 1
+
+   * - Operation
+     - Result
+     - Notes
+   * - FSx → S3 (existing files)
+     - Not exported automatically
+     - One-time export required
+   * - FSx → S3 (new or modified files)
+     - Automatically exported
+     - Full data copied asynchronously
+   * - FSx file deletion
+     - No effect on S3
+     - No automatic deletion
+   * - S3 → FSx (any file)
+     - Imported on access
+     - Metadata and data are lazy
+   * - Auto-import policy
+     - Enables access-triggered import
+     - No proactive copying
+
 .. note::
 
    - DRA is particularly useful for large datasets

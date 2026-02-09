@@ -55,8 +55,8 @@ copy all file contents from S3**.
 
 By default:
 
-- FSx imports **metadata only** (directory tree, filenames)
-- File contents are fetched **on demand** when accessed
+- FSx does **not** proactively import metadata or file contents
+- Metadata and data are imported **lazily** when files are accessed
 - This behavior saves time and storage for large datasets
 
 There are three ways to populate data from S3 to FSx.
