@@ -102,7 +102,7 @@ Build process
       It is not necessary to explicitly specify a VPC, since each subnet belongs
       to exactly one VPC.
 
-    Example ``image-build.yaml``
+    Example :download:`image-config.yaml <../configs/image-config.yaml>`
 
     .. code-block:: yaml
 

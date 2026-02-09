@@ -1,0 +1,51 @@
+Region: us-east-1
+Image:
+  Os: ubuntu2404
+  CustomAmi: ami-08ea421ec9fad0a09
+
+HeadNode:
+  InstanceType: c5.large
+  Ssh:
+    KeyName: dzhang # <-- change to your keypair name
+  Networking:
+    SubnetId: subnet-08895ae58a2f9167d
+    SecurityGroups:
+      - sg-0f504cd36a5dc0b34
+
+Scheduling:
+  Scheduler: slurm
+  SlurmSettings:
+    QueueUpdateStrategy: DRAIN
+  SlurmQueues:
+    - Name: ondemand
+      CapacityType: ONDEMAND
+      Networking:
+        SubnetIds:
+          - subnet-08895ae58a2f9167d
+        SecurityGroups:
+          - sg-0f504cd36a5dc0b34
+      ComputeResources:
+        - Name: c8a12xl
+          InstanceType: c8a.12xlarge
+          MinCount: 0
+          MaxCount: 20
+
+    - Name: spot
+      CapacityType: SPOT
+      Networking:
+        SubnetIds:
+          - subnet-08895ae58a2f9167d
+        SecurityGroups:
+          - sg-0f504cd36a5dc0b34
+      ComputeResources:
+        - Name: c8a12xl
+          InstanceType: c8a.12xlarge
+          MinCount: 0
+          MaxCount: 50
+
+SharedStorage:
+  - Name: fsx_input
+    StorageType: FsxLustre
+    MountDir: /fsx_input
+    FsxLustreSettings:
+      FileSystemId: fs-009ecfd7e44882657

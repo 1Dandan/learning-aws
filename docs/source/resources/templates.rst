@@ -82,6 +82,7 @@ Example template (Slurm + FSx for Lustre)
    Region: us-east-1
 
    Image:
+     Os: ubuntu2404
      CustomAmi: <your-custom-ami-id>          # AMI built by pcluster build-image, or another suitable AMI
 
    HeadNode:

@@ -1,0 +1,13 @@
+Region: us-east-1
+
+Image:
+  Name: gchp-imi-pcluster-base-v202602
+
+Build:
+  ParentImage: ami-0cfdf7095223ff295  # <-- your existing AMI
+  InstanceType: t3.large
+  SubnetId: subnet-3198906c            # any default public subnet is fine
+  SecurityGroupIds:
+    - sg-0b7fdbbcb20e53b4e
+  UpdateOsPackages:
+    Enabled: true
