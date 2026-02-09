@@ -81,7 +81,7 @@ Two data repository associations (DRAs) are created with the following settings:
 
 .. note::
 
-  - Select all import policies and deselect all export policies 
+  - **Select all import policies and deselect all export policies** 
     so that S3 → FSx synchronization is enabled while FSx → S3 synchronization is disabled.
   - On AWS console, we cannot create multiple DRAs at once. 
     We can modify DRA settings after FSx is created by:
