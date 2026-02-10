@@ -34,6 +34,9 @@ Scheduling:
           InstanceType: c8a.24xlarge
           MinCount: 0
           MaxCount: 20
+          DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
+          Efa:
+            Enabled: false
 
     - Name: spot
       CapacityType: SPOT
@@ -52,6 +55,9 @@ Scheduling:
           InstanceType: c8a.24xlarge
           MinCount: 0
           MaxCount: 50
+          DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
+          Efa:
+            Enabled: false
  
     - Name: submit-c8a2xl
       CapacityType: ONDEMAND
@@ -70,6 +76,9 @@ Scheduling:
           InstanceType: c8a.2xlarge
           MinCount: 0
           MaxCount: 2
+          DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
+          Efa:
+            Enabled: false
 
 SharedStorage:
   - Name: fsx_input
