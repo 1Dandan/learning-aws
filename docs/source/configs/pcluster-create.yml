@@ -9,7 +9,7 @@ HeadNode:
     KeyName: dzhang # <-- change to your keypair name
   Networking:
     SubnetId: subnet-074660a6fc92af350
-    SecurityGroups:
+    AdditionalSecurityGroups:
       - sg-0f504cd36a5dc0b34
 
 Scheduling:
@@ -22,7 +22,12 @@ Scheduling:
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
-        SecurityGroups:
+          - subnet-09682a7c73cfee0e4
+          - subnet-0a2db44201cf0e790
+          - subnet-08895ae58a2f9167d
+          - subnet-0c7f94531be1ceff1
+          - subnet-05f1b0f01cfb5f370
+        AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
         - Name: c8a24xl
@@ -35,7 +40,12 @@ Scheduling:
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
-        SecurityGroups:
+          - subnet-09682a7c73cfee0e4
+          - subnet-0a2db44201cf0e790
+          - subnet-08895ae58a2f9167d
+          - subnet-0c7f94531be1ceff1
+          - subnet-05f1b0f01cfb5f370
+        AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
         - Name: c8a24xl
@@ -43,12 +53,17 @@ Scheduling:
           MinCount: 0
           MaxCount: 50
  
-    - Name: submit
+    - Name: submit-c8a2xl
       CapacityType: ONDEMAND
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
-        SecurityGroups:
+          - subnet-09682a7c73cfee0e4
+          - subnet-0a2db44201cf0e790
+          - subnet-08895ae58a2f9167d
+          - subnet-0c7f94531be1ceff1
+          - subnet-05f1b0f01cfb5f370
+        AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
         - Name: c8a2xl

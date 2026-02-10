@@ -65,7 +65,7 @@ An example :download:`pcluster-create.yml <../configs/pcluster-create.yml>`:
        KeyName: dzhang  # <-- change to your keypair name
      Networking:
        SubnetId: subnet-08895ae58a2f9167d
-       SecurityGroups:
+       AdditionalSecurityGroups:
          - sg-0f504cd36a5dc0b34
 
    Scheduling:
@@ -78,7 +78,7 @@ An example :download:`pcluster-create.yml <../configs/pcluster-create.yml>`:
          Networking:
            SubnetIds:
              - subnet-08895ae58a2f9167d
-           SecurityGroups:
+           AdditionalSecurityGroups:
              - sg-0f504cd36a5dc0b34
          ComputeResources:
            - Name: c8a12xl
@@ -91,7 +91,7 @@ An example :download:`pcluster-create.yml <../configs/pcluster-create.yml>`:
          Networking:
            SubnetIds:
              - subnet-08895ae58a2f9167d
-           SecurityGroups:
+           AdditionalSecurityGroups:
              - sg-0f504cd36a5dc0b34
          ComputeResources:
            - Name: c8a12xl
