@@ -40,8 +40,9 @@ Upload Input Data Using Python Scripts (Recommended)
 =========================== ========================================= ========================
 Input data                                 S3 bucket name                  Downloading scripts
 =========================== ========================================= ========================
-GEOS-Chem                   geos-chem (us-west-2); gcgrid (us-east-1)  :download:`copy_geoschem_inputdata_s3_to_s3.py <../scripts/copy_geoschem_inputdata_s3_to_s3.py>`
+GEOS-Chem                   geos-chem (us-west-2); gcgrid (us-east-1) :download:`copy_geoschem_inputdata_s3_to_s3.py <../scripts/copy_geoschem_inputdata_s3_to_s3.py>`
 Blended TROPOMI             blended-tropomi-gosat-methane (us-west-2) :download:`copy_blended_TROPOMI_s3_to_s3.py <../scripts/copy_blended_TROPOMI_s3_to_s3.py>`
+IMI BC conditions           imi-boundary-condition (us-east-1)        :download:`copy_imi_boundary_conditions_s3_to_s3.py <../scripts/copy_imi_boundary_conditions_s3_to_s3.py>`
 =========================== ========================================= ========================
 
 Check the bucket region by::
@@ -136,6 +137,46 @@ Downloading scripts tutorials
 
   If you are satisfied with the dryrun output, just remove ``--dryrun`` for a real copy
 
+- For boundary conditions from satellite data
+
+User the helper scripts :download:`copy_imi_boundary_conditions_s3_to_s3.py <../scripts/copy_imi_boundary_conditions_s3_to_s3.py>`.
+  
+  .. code-block:: bash
+
+    python copy_imi_boundary_conditions_s3_to_s3.py \
+      <start_yyyymmdd> <end_yyyymmdd> \
+      <dest-bucket> <vYYYY-MM> \
+      [--dest-prefix PREFIX] \
+      [--src-bucket imi-boundary-conditions] \
+      [--src-prefix PREFIX] \
+      [--dryrun]
+  
+  An example dry run::
+
+    python copy_imi_boundary_conditions_s3_to_s3.py \
+      20240501 20240502 \
+      dzhang-imi-gchp-test \
+      v2025-06-blended \
+      --dest-prefix blended-boundary-conditions/ --dryrun
+  
+  You will see similar message like::
+
+    =============Mirror IMI Boundary Conditions (S3 → S3)=============
+    Range:      [20240501, 20240502)
+    Source:     s3://imi-boundary-conditions/v2025-06-blended/
+    Dest:       s3://dzhang-imi-gchp-test/blended-boundary-conditions/
+    Key rule:   dst_key = <dest_prefix> + <src_key>
+    Dryrun:     True | Overwrite: False
+    ===================================================================
+    Objects matched: 1
+    [DRYRUN] s3://imi-boundary-conditions/v2025-06-blended/GEOSChem.BoundaryConditions.20240501_0000z.nc4 
+    -> s3://dzhang-imi-gchp-test/blended-boundary-conditions/v2025-06-blended/
+    GEOSChem.BoundaryConditions.20240501_0000z.nc4
+    ===================================================================
+    Done. copied=0 skipped=0 failed=0 dryrun=1
+    ===================================================================
+
+  If you are satisfied with the dryrun output, just remove ``--dryrun`` for a real copy
 
 Upload Output Data from FSx for Lustre (Best for Large Outputs)
 -------------------------------------------------------------------

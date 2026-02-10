@@ -8,7 +8,7 @@ HeadNode:
   Ssh:
     KeyName: dzhang # <-- change to your keypair name
   Networking:
-    SubnetId: subnet-08895ae58a2f9167d
+    SubnetId: subnet-074660a6fc92af350
     SecurityGroups:
       - sg-0f504cd36a5dc0b34
 
@@ -21,12 +21,12 @@ Scheduling:
       CapacityType: ONDEMAND
       Networking:
         SubnetIds:
-          - subnet-08895ae58a2f9167d
+          - subnet-074660a6fc92af350
         SecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c8a12xl
-          InstanceType: c8a.12xlarge
+        - Name: c8a24xl
+          InstanceType: c8a.24xlarge
           MinCount: 0
           MaxCount: 20
 
@@ -34,18 +34,31 @@ Scheduling:
       CapacityType: SPOT
       Networking:
         SubnetIds:
-          - subnet-08895ae58a2f9167d
+          - subnet-074660a6fc92af350
         SecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c8a12xl
-          InstanceType: c8a.12xlarge
+        - Name: c8a24xl
+          InstanceType: c8a.24xlarge
           MinCount: 0
           MaxCount: 50
+ 
+    - Name: submit
+      CapacityType: ONDEMAND
+      Networking:
+        SubnetIds:
+          - subnet-074660a6fc92af350
+        SecurityGroups:
+          - sg-0f504cd36a5dc0b34
+      ComputeResources:
+        - Name: c8a2xl
+          InstanceType: c8a.2xlarge
+          MinCount: 0
+          MaxCount: 2
 
 SharedStorage:
   - Name: fsx_input
     StorageType: FsxLustre
     MountDir: /fsx_input
     FsxLustreSettings:
-      FileSystemId: fs-009ecfd7e44882657
+      FileSystemId: fs-03e9bfee5ab98c762

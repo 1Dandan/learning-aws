@@ -79,6 +79,11 @@ Two data repository associations (DRAs) are created with the following settings:
   - File system path: ``/blended-tropomi``
   - S3 path: ``s3://dzhang-imi-gchp-test/blended-tropomi``
 
+- **DRA 3**
+
+  - File system path: ``/blended-boundary-conditions``
+  - S3 path: ``s3://dzhang-imi-gchp-test/blended-boundary-conditions``
+
 .. note::
 
   - **Select all import policies and deselect all export policies** 
