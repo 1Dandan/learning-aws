@@ -67,7 +67,7 @@ Assume an FSx for Lustre file system is mounted on an EC2 instance at::
 
   /fsx_input
 
-Two data repository associations (DRAs) are created with the following settings:
+Three data repository associations (DRAs) are created with the following settings:
 
 - **DRA 1**
 
@@ -144,6 +144,17 @@ access S3 (trusted by fsx.amazonaws.com and allowed S3 actions).
     --tags Key=Name,Value=dra-blended-tropomi \
     --client-request-token dra-tropomi-001
 
+  # DRA 3: Import-only (or add AutoExportPolicy if you truly want FSx -> S3 sync)
+  aws fsx create-data-repository-association \
+    --file-system-id "$FSX_ID" \
+    --file-system-path "/blended-boundary-conditions" \
+    --data-repository-path "s3://dzhang-imi-gchp-test/blended-boundary-conditions" \
+    --batch-import-meta-data-on-create \
+    --s3 '{
+      "AutoImportPolicy": {"Events": ["NEW","CHANGED","DELETED"]}
+    }' \
+    --tags Key=Name,Value=dra-blended-bc \
+    --client-request-token dra-bc-001
 
 Verify DRA exists
 

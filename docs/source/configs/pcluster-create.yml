@@ -22,16 +22,11 @@ Scheduling:
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
-          - subnet-09682a7c73cfee0e4
-          - subnet-0a2db44201cf0e790
-          - subnet-08895ae58a2f9167d
-          - subnet-0c7f94531be1ceff1
-          - subnet-05f1b0f01cfb5f370
         AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c8a24xl
-          InstanceType: c8a.24xlarge
+        - Name: c524xl
+          InstanceType: c5.24xlarge
           MinCount: 0
           MaxCount: 20
           DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
@@ -43,37 +38,27 @@ Scheduling:
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
-          - subnet-09682a7c73cfee0e4
-          - subnet-0a2db44201cf0e790
-          - subnet-08895ae58a2f9167d
-          - subnet-0c7f94531be1ceff1
-          - subnet-05f1b0f01cfb5f370
         AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c8a24xl
-          InstanceType: c8a.24xlarge
+        - Name: c524xl
+          InstanceType: c5.24xlarge
           MinCount: 0
           MaxCount: 50
           DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
           Efa:
             Enabled: false
  
-    - Name: submit-c8a2xl
+    - Name: submit-c52xl
       CapacityType: ONDEMAND
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
-          - subnet-09682a7c73cfee0e4
-          - subnet-0a2db44201cf0e790
-          - subnet-08895ae58a2f9167d
-          - subnet-0c7f94531be1ceff1
-          - subnet-05f1b0f01cfb5f370
         AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c8a2xl
-          InstanceType: c8a.2xlarge
+        - Name: c52xl
+          InstanceType: c5.2xlarge
           MinCount: 0
           MaxCount: 2
           DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
