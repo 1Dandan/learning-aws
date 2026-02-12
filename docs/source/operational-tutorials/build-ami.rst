@@ -30,11 +30,24 @@ SSH into the instance:
   - ``public_ip_address`` is the public IPv4 address shown in the AWS console
     for the EC2 instance.
 
+Base AMI
+^^^^^^^^^^
+
+You can search a base AMI to start by::
+
+  pcluster list-official-images --region us-east-1 --os ubuntu2404
+
+.. note::
+
+  Choose the right architecture you want (**x86_64** or **arm64**).
+  
 Install required libraries
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Install all required libraries and tools directly on the EC2 instance,
 following the same procedure as on a local machine running the same OS.
+
+The instruction to install required libararies can be found at `build required software with spack <https://gchp.readthedocs.io/en/latest/geos-chem-shared-docs/supplemental-guides/spack-guide.html#spackguide>`_
 
 Create AMI
 ^^^^^^^^^^
