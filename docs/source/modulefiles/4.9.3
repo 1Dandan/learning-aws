@@ -1,0 +1,84 @@
+#%Module######################################################################
+##
+##     netcdf-c_4.9.3_openmpi4.1.7 modulefile
+##
+## build info:
+## module load openmpi/4.1.7
+## module load hdf5/1.14.6
+## export CC=mpicc
+## export HDF5_DIR=/home/ec2-user/software/hdf5-1.14.6/install
+## export szip_DIR=/home/ec2-user/software/szip-2.1.1/install
+## export CPPFLAGS="-I${HDF5_DIR}/include -I${szip_DIR}/include"
+## export LDFLAGS="-L${HDF5_DIR}/lib -L${szip_DIR}/lib"
+## ./configure --prefix=/home/ec2-user/software/netcdf-c-4.9.3/install/install \
+## --enable-mmap --enable-jna
+## make -j
+## make install
+##
+###########################################################################
+
+set basepath  /home/ec2-user/software/netcdf-c-4.9.3/install
+set hdf5path  /home/ec2-user/software/hdf5-1.14.6/install
+
+# Ensure intended MPI + HDF5 stack is loaded
+if { ![is-loaded openmpi/4.1.7] } {
+    module load openmpi/4.1.7
+}
+if { ![is-loaded hdf5/1.14.6] } {
+    module load hdf5/1.14.6
+}
+
+# lib vs lib64 guard for netcdf-c itself
+set libdir $basepath/lib
+if { [file isdirectory $basepath/lib64] } {
+    set libdir $basepath/lib64
+}
+
+# Core netCDF-C paths
+prepend-path PATH            $basepath/bin
+prepend-path LD_LIBRARY_PATH $libdir
+prepend-path LIBRARY_PATH    $libdir
+prepend-path CPATH           $basepath/include
+prepend-path INCLUDE         $basepath/include
+prepend-path PKG_CONFIG_PATH $libdir/pkgconfig
+prepend-path CMAKE_PREFIX_PATH $basepath
+
+# NetCDF plugin support (nczarr / multifilters etc.)
+# Matches nc-config --plugindir
+set plugindir $basepath/hdf5/lib/plugin
+if { [file isdirectory $plugindir] } {
+    # netCDF uses HDF5 plugin path env vars in practice
+    # Keeping both is harmless; downstream tools vary.
+    prepend-path HDF5_PLUGIN_PATH $plugindir
+    prepend-path NETCDF_PLUGIN_DIR $plugindir
+}
+
+# Helpful environment variables for build systems
+setenv NETCDF_ROOT        $basepath
+setenv NETCDF_DIR         $basepath
+setenv NETCDF_HOME        $basepath
+setenv NETCDF_INCLUDE_DIR $basepath/include
+setenv NETCDF_LIB_DIR     $libdir
+
+# Help text
+proc ModulesHelp { } {
+    puts stderr "\
+This module provides netCDF-C version 4.9.3 binaries and libraries.
+
+Configured with:
+  CC=mpicc (OpenMPI 4.1.7)
+  HDF5 support: yes (HDF5 1.14.6)
+  Parallel netCDF-4: yes (parallel4 + parallel enabled)
+  DAP2/DAP4: yes
+  NCZarr: yes
+  Standard filters: bz2, deflate(zlib), zstd
+
+Install path:
+  /home/ec2-user/software/netcdf-c-4.9.3/install
+
+Useful commands:
+  nc-config --all
+"
+}
+
+module-whatis "netCDF-C 4.9.3 (MPI, parallel4, HDF5)"

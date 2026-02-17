@@ -1,0 +1,83 @@
+#%Module######################################################################
+##
+##     netcdf-fortran_4.6.2_openmpi4.1.7 modulefile
+##
+## build info:
+## module load openmpi/4.1.7
+## module load hdf5/1.14.6
+## module load netcdf-c/4.9.3
+## export CC=mpicc
+## export FC=mpif90
+## export NCDIR=/home/ec2-user/software/netcdf-c-4.9.3/install
+## export LD_LIBRARY_PATH=${NCDIR}/lib:${LD_LIBRARY_PATH}
+## export CPPFLAGS=-I${NCDIR}/include
+## export LDFLAGS=-L${NCDIR}/lib
+## ./configure --prefix=/home/ec2-user/software/netcdf-fortran-4.6.2/install \
+## make -j
+## make install
+##
+###########################################################################
+
+set basepath   /home/ec2-user/software/netcdf-fortran-4.6.2/install
+set netcdfc    /home/ec2-user/software/netcdf-c-4.9.3/install
+
+# Ensure the intended stack is loaded
+if { ![is-loaded openmpi/4.1.7] } {
+    module load openmpi/4.1.7
+}
+if { ![is-loaded hdf5/1.14.6] } {
+    module load hdf5/1.14.6
+}
+if { ![is-loaded netcdf-c/4.9.3] } {
+    module load netcdf-c/4.9.3
+}
+
+# lib vs lib64 guard for netcdf-fortran itself
+set libdir $basepath/lib
+if { [file isdirectory $basepath/lib64] } {
+    set libdir $basepath/lib64
+}
+
+# Core netCDF-Fortran paths
+prepend-path PATH            $basepath/bin
+prepend-path LD_LIBRARY_PATH $libdir
+prepend-path LIBRARY_PATH    $libdir
+prepend-path CPATH           $basepath/include
+prepend-path FPATH           $basepath/include
+prepend-path INCLUDE         $basepath/include
+prepend-path PKG_CONFIG_PATH $libdir/pkgconfig
+prepend-path CMAKE_PREFIX_PATH $basepath
+
+# Helpful environment variables for build systems
+setenv NETCDF_FORTRAN_ROOT        $basepath
+setenv NETCDF_FORTRAN_DIR         $basepath
+setenv NETCDF_FORTRAN_HOME        $basepath
+setenv NETCDF_FORTRAN_INCLUDE_DIR $basepath/include
+setenv NETCDF_FORTRAN_LIB_DIR     $libdir
+
+# Convenience: Some projects expect NETCDF to include Fortran too
+# (Safe, since netcdf-c/4.9.3 module already sets NETCDF_* to C install.)
+# Uncomment if you want netcdf-fortran to "win" for NETCDF_* variables:
+# setenv NETCDF_ROOT   $basepath
+# setenv NETCDF_DIR    $basepath
+# setenv NETCDF_HOME   $basepath
+
+# Help text
+proc ModulesHelp { } {
+    puts stderr "\
+This module provides netCDF-Fortran version 4.6.2 binaries and libraries.
+
+Configured with:
+  CC=mpicc (OpenMPI 4.1.7)
+  FC=mpif90 (OpenMPI 4.1.7)
+  Depends on netcdf-c 4.9.3
+
+Install path:
+  /home/ec2-user/software/netcdf-fortran-4.6.2/install
+
+Useful commands:
+  nf-config --all
+"
+}
+
+module-whatis "netCDF-Fortran 4.6.2 (MPI, depends on netCDF-C 4.9.3)"

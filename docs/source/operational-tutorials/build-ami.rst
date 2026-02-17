@@ -44,10 +44,27 @@ You can search a base AMI to start by::
 Install required libraries
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Install all required libraries and tools directly on the EC2 instance,
-following the same procedure as on a local machine running the same OS.
+- Spack approach
 
-The instruction to install required libararies can be found at `build required software with spack <https://gchp.readthedocs.io/en/latest/geos-chem-shared-docs/supplemental-guides/spack-guide.html#spackguide>`_
+  Install all required libraries and tools directly on the EC2 instance,
+  following the same procedure as on a local machine running the same OS.
+
+  The instruction to install required libararies can be found at `build required software with spack <https://gchp.readthedocs.io/en/latest/geos-chem-shared-docs/supplemental-guides/spack-guide.html#spackguide>`_
+
+- Install from source
+
+  I personally like the clean way to install only needed libraries from the source code.
+  Usually compilers (GNU or intel) and MPI libraries are installed in the system already, 
+  I only install required libraries of `hdf5 <https://www.hdfgroup.org/download-hdf5/>`_, 
+  `netcdf-c <https://downloads.unidata.ucar.edu/netcdf/>`_, 
+  `netcdf-fortran <https://downloads.unidata.ucar.edu/netcdf-fortran/>`_, 
+  and optionally `nco <https://github.com/nco/nco>`_ and 
+  `cdo <https://code.mpimet.mpg.de/projects/cdo/files>`_.
+
+  I then create corresponding module files to load then as modules.
+  Examples can be found at :download:`hdf5-modulefile <../modulefiles/1.14.6>`,
+  :download:`netcdf-c-modulefile <../modulefiles/4.9.3>`,
+  and :download:`netcdf-fortran-modulefile <../modulefiles/4.6.2>`.
 
 Create AMI
 ^^^^^^^^^^
