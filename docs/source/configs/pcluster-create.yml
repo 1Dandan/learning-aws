@@ -1,7 +1,7 @@
 Region: us-east-1
 Image:
-  Os: ubuntu2404
-  CustomAmi: ami-08ea421ec9fad0a09
+  Os: alinux2023
+  CustomAmi: ami-0b93cb405ecdb5452
 
 HeadNode:
   InstanceType: c5.large
@@ -17,50 +17,65 @@ Scheduling:
   SlurmSettings:
     QueueUpdateStrategy: DRAIN
   SlurmQueues:
-    - Name: ondemand
+    - Name: ondemand-24xl
       CapacityType: ONDEMAND
+      AllocationStrategy: lowest-price
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
         AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c524xl
-          InstanceType: c5.24xlarge
+        - Name: cpu24xl
+          Instances:
+            - InstanceType: c5.24xlarge
+            - InstanceType: c6i.24xlarge
+            - InstanceType: c7i.24xlarge
+            - InstanceType: c8i.24xlarge
           MinCount: 0
           MaxCount: 20
-          DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
+          DisableSimultaneousMultithreading: true
           Efa:
             Enabled: false
 
-    - Name: spot
+    - Name: spot-24xl
       CapacityType: SPOT
+      AllocationStrategy: capacity-optimized
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
         AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c524xl
-          InstanceType: c5.24xlarge
+        - Name: cpu24xl
+          Instances:
+            - InstanceType: c5.24xlarge
+            - InstanceType: c6i.24xlarge
+            - InstanceType: c7i.24xlarge
+            - InstanceType: c8i.24xlarge
           MinCount: 0
           MaxCount: 50
-          DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
+          DisableSimultaneousMultithreading: true
           Efa:
             Enabled: false
  
-    - Name: submit-c52xl
+    - Name: submit-2xl
       CapacityType: ONDEMAND
+      AllocationStrategy: lowest-price
       Networking:
         SubnetIds:
           - subnet-074660a6fc92af350
         AdditionalSecurityGroups:
           - sg-0f504cd36a5dc0b34
       ComputeResources:
-        - Name: c52xl
-          InstanceType: c5.2xlarge
+        - Name: cpu2xl
+          Instances:
+            - InstanceType: c5.2xlarge
+            - InstanceType: c6i.2xlarge
+            - InstanceType: c7i.2xlarge
+            - InstanceType: c8i.2xlarge
           MinCount: 0
-          MaxCount: 2
+          MaxCount: 10
           DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
           Efa:
             Enabled: false

@@ -1,11 +1,11 @@
 Region: us-east-1
 
 Image:
-  Name: gchp-imi-pcluster-base-v202602
+  Name: imi-gchp-miniconda-modules-pcluster-base-v202602
 
 Build:
-  ParentImage: ami-0cfdf7095223ff295  # <-- your existing AMI
-  InstanceType: t3.large
+  ParentImage: ami-0f59f475c233e31f9  # <-- your existing AMI
+  InstanceType: c5.xlarge
   SubnetId: subnet-3198906c            # any default public subnet is fine
   SecurityGroupIds:
     - sg-0b7fdbbcb20e53b4e
