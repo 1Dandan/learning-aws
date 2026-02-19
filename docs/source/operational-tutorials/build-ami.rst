@@ -58,13 +58,16 @@ Install required libraries
   I only install required libraries of `hdf5 <https://www.hdfgroup.org/download-hdf5/>`_, 
   `netcdf-c <https://downloads.unidata.ucar.edu/netcdf/>`_, 
   `netcdf-fortran <https://downloads.unidata.ucar.edu/netcdf-fortran/>`_, 
+  `esmf <https://github.com/esmf-org/esmf/releases/tag/v8.6.1>`_, 
   and optionally `nco <https://github.com/nco/nco>`_ and 
   `cdo <https://code.mpimet.mpg.de/projects/cdo/files>`_.
 
   I then create corresponding module files to load then as modules.
   Examples can be found at :download:`hdf5-modulefile <../modulefiles/1.14.6>`,
-  :download:`netcdf-c-modulefile <../modulefiles/4.9.3>`,
-  and :download:`netcdf-fortran-modulefile <../modulefiles/4.6.2>`.
+  :download:`netcdf-c-modulefile <../modulefiles/4.9.3>`, 
+  :download:`netcdf-fortran-modulefile <../modulefiles/4.6.2>`, 
+  :download:`esmf-modulefile <../modulefiles/8.6.1>`, 
+  and an overall :download:`gchp-env-modulefile <../modulefiles/2026-02.GNU>`.
 
 Create AMI
 ^^^^^^^^^^

@@ -1,0 +1,111 @@
+#%Module######################################################################
+##
+##     esmf_8.6.1_openmpi4.1.7 modulefile
+##
+## build info:
+## module load openmpi/4.1.7
+## module load netcdf-c/4.9.3
+## module load netcdf-fortran/4.6.2
+##
+## export ESMF_DIR=/home/ec2-user/software/esmf-8.6.1
+## export ESMF_INSTALL_PREFIX=/home/ec2-user/software/esmf-8.6.1/install
+## export ESMF_COMM=openmpi
+## export ESMF_COMPILER=gfortran
+## export ESMF_F90COMPILEOPTS="-fallow-argument-mismatch -fallow-invalid-boz"
+## export ESMF_NETCDF=nc-config
+##
+## make info
+## make
+## make install
+##
+###########################################################################
+
+set esmf_src    /home/ec2-user/software/esmf-8.6.1
+set esmf_prefix /home/ec2-user/software/esmf-8.6.1/install
+
+# Executables (so ESMF_RegridWeightGen resolves to THIS install, not conda)
+prepend-path PATH $esmf_prefix/bin/binO/Linux.gfortran.64.openmpi.default/
+
+# Platform-specific install layout (from your find output)
+set esmf_libdir $esmf_prefix/lib/libO/Linux.gfortran.64.openmpi.default
+set esmf_mkfile $esmf_libdir/esmf.mk
+
+# Ensure intended dependency stack is loaded
+if { ![is-loaded openmpi/4.1.7] } {
+    module load openmpi/4.1.7
+}
+
+# Safety checks (helpful error messages)
+if { ![file isdirectory $esmf_prefix] } {
+    puts stderr "ERROR: ESMF install prefix not found: $esmf_prefix"
+}
+if { ![file isdirectory $esmf_libdir] } {
+    puts stderr "ERROR: ESMF lib directory not found: $esmf_libdir"
+}
+if { ![file exists $esmf_mkfile] } {
+    puts stderr "ERROR: ESMF mkfile not found: $esmf_mkfile"
+}
+
+# Libraries (this is what actually matters at runtime)
+prepend-path LD_LIBRARY_PATH $esmf_libdir
+prepend-path LIBRARY_PATH    $esmf_libdir
+
+# Some installs also have generic lib directories; harmless if they exist
+foreach libcand [list "$esmf_prefix/lib" "$esmf_prefix/lib64"] {
+    if { [file isdirectory $libcand] } {
+        prepend-path LD_LIBRARY_PATH $libcand
+        prepend-path LIBRARY_PATH    $libcand
+        prepend-path PKG_CONFIG_PATH $libcand/pkgconfig
+    }
+}
+
+# Fortran modules / includes
+# ESMF commonly exposes .mod in $esmf_src/mod; keep it in search path
+if { [file isdirectory "$esmf_src/mod" ] } {
+    prepend-path FPATH   $esmf_src/mod
+    prepend-path INCLUDE $esmf_src/mod
+}
+if { [file isdirectory "$esmf_prefix/include" ] } {
+    prepend-path CPATH   $esmf_prefix/include
+    prepend-path INCLUDE $esmf_prefix/include
+    prepend-path FPATH   $esmf_prefix/include
+}
+
+# CMake helper (optional but nice)
+prepend-path CMAKE_PREFIX_PATH $esmf_prefix
+
+# Key variables used by downstream builds (MAPL, GEOS-Chem, etc.)
+setenv ESMF_DIR            $esmf_src
+setenv ESMF_INSTALL_PREFIX $esmf_prefix
+setenv ESMF_ROOT           $esmf_prefix
+
+setenv ESMF_COMM           openmpi
+setenv ESMF_COMPILER       gfortran
+setenv ESMF_F90COMPILEOPTS "-fallow-argument-mismatch -fallow-invalid-boz"
+
+# Most important: tell downstream builds exactly which makefile fragment to use
+setenv ESMFMKFILE          $esmf_mkfile
+
+# Help text
+proc ModulesHelp { } {
+    puts stderr "\
+This module provides ESMF version 8.6.1 libraries and build settings.
+
+Install prefix:
+  /home/ec2-user/software/esmf-8.6.1/install
+
+ESMFMKFILE:
+  /home/ec2-user/software/esmf-8.6.1/install/lib/libO/Linux.gfortran.64.openmpi.default/esmf.mk
+
+Depends on:
+  openmpi/4.1.7
+  netcdf-fortran/4.6.2
+
+Build settings:
+  ESMF_COMM=openmpi
+  ESMF_COMPILER=gfortran
+  ESMF_F90COMPILEOPTS=-fallow-argument-mismatch -fallow-invalid-boz
+"
+}
+
+module-whatis "ESMF 8.6.1 (OpenMPI 4.1.7, gfortran)"
