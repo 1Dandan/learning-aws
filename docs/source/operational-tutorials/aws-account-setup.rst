@@ -208,3 +208,18 @@ To deactivate the access key:
 - Choose **Deactivate**
 
 The key can be reactivated later if needed.
+
+List AWS configured credentials
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can check your configures AWS profiles by::
+
+  aws configure list-profiles
+
+By default, it will use your configured AWS profile named ``default``.
+
+Check current credentials being used::
+
+  aws sts get-caller-identity
+
+This is the credential used for AWS CLI.
