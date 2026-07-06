@@ -115,7 +115,7 @@ An example :download:`check-AZ-scores.sh <../scripts/check-AZ-scores.sh>`:
 
     #!/bin/bash
     REGION=us-east-1
-    TARGET_CAPACITY=100
+    TARGET_CAPACITY=96 # number of vCPUs
 
     INSTANCE_TYPES=(
     c5.24xlarge
