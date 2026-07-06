@@ -109,7 +109,7 @@ An example :download:`pcluster-create.yml <../configs/pcluster-create.yml>`:
 Check the availability of spot instances
 -------------------------------------------
 
-An example :download:`pcluster-create.yml <../scripts/check-AZ-scores.sh>`:
+An example :download:`check-AZ-scores.sh <../scripts/check-AZ-scores.sh>`:
 
 .. code-block:: bash
 
