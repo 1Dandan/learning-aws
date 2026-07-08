@@ -139,7 +139,7 @@ Downloading scripts tutorials
 
 - For boundary conditions from satellite data
 
-User the helper scripts :download:`copy_imi_boundary_conditions_s3_to_s3.py <../scripts/copy_imi_boundary_conditions_s3_to_s3.py>`.
+Use the helper scripts :download:`copy_imi_boundary_conditions_s3_to_s3.py <../scripts/copy_imi_boundary_conditions_s3_to_s3.py>`.
   
   .. code-block:: bash
 
@@ -175,6 +175,48 @@ User the helper scripts :download:`copy_imi_boundary_conditions_s3_to_s3.py <../
     ===================================================================
     Done. copied=0 skipped=0 failed=0 dryrun=1
     ===================================================================
+
+  If you are satisfied with the dryrun output, just remove ``--dryrun`` for a real copy
+
+
+Sometime we need to upload data from local server to S3 bucket
+
+Use the helper scripts :download:`upload_imi_boundary_conditions_local_to_s3.py <../scripts/upload_imi_boundary_conditions_local_to_s3.py>`.
+
+  .. code-block:: bash
+
+    python upload_imi_boundary_conditions_local_to_s3.py \
+      <start_yyyymmdd> <end_yyyymmdd> \
+      <dest-bucket> <vYYYY-MM> \
+      [--local-root /path/to/BC/without/version] \
+      [--dest-prefix PREFIX] \
+      [--nproc NUM_PROCS] \
+      [--dryrun]
+  
+  An example dry run::
+
+    python upload_imi_boundary_conditions_local_to_s3.py \
+        20240501 20240502 \
+        dzhang-imi-gchp v2025-12 \
+        --local-root /n/holylfs05/LABS/jacob_lab/imi/ch4/blended-boundary-conditions/ \
+        --dest-prefix blended-boundary-conditions/ \
+        --nproc 8 --dryrun
+  
+  You will see similar message like::
+
+    =============Upload IMI Boundary Conditions (local → S3)=============
+    Range:      [20240501, 20240502)
+    Local root: /n/holylfs05/LABS/jacob_lab/imi/ch4/blended-boundary-conditions
+    Search dir: /n/holylfs05/LABS/jacob_lab/imi/ch4/blended-boundary-conditions/v2025-12
+    Dest:       s3://dzhang-imi-gchp/blended-boundary-conditions/
+    Key rule:   dst_key = <dest_prefix> + <path relative to local_root>
+    Dryrun:     True | Overwrite: False
+    ====================================================================
+    Files matched: 1
+    [DRYRUN] /n/holylfs05/LABS/jacob_lab/imi/ch4/blended-boundary-conditions/v2025-12/GEOSChem.BoundaryConditions.20240501_0000z.nc4 -> s3://dzhang-imi-gchp/blended-boundary-conditions/v2025-12/GEOSChem.BoundaryConditions.20240501_0000z.nc4
+    ====================================================================
+    Done. copied=0 skipped=0 failed=0 dryrun=1
+    ====================================================================
 
   If you are satisfied with the dryrun output, just remove ``--dryrun`` for a real copy
 
