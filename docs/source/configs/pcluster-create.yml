@@ -1,20 +1,29 @@
 Region: us-east-1
 Image:
   Os: alinux2023
-  CustomAmi: ami-0b93cb405ecdb5452
+  CustomAmi: ami-09f9e0d0e5b6e0030
 
 HeadNode:
-  InstanceType: c5.large
+  InstanceType: c5.2xlarge
   Ssh:
-    KeyName: dzhang # <-- change to your keypair name
+    KeyName: dzhang_hdsi # <-- change to your keypair name
   Networking:
-    SubnetId: subnet-074660a6fc92af350
+    SubnetId: subnet-0e49c2791ab2df5e2
     AdditionalSecurityGroups:
-      - sg-0f504cd36a5dc0b34
+      - sg-09a43254e7e8383b1
+  Iam:
+    S3Access:
+      - BucketName: dzhang-imi-gchp-output
+        EnableWriteAccess: true
 
 Scheduling:
   Scheduler: slurm
   SlurmSettings:
+    CustomSlurmSettings:
+      - KillWait: 30
+      - MinJobAge: 86400
+      - KillOnBadExit: 1
+      - MpiDefault: pmix
     QueueUpdateStrategy: DRAIN
   SlurmQueues:
     - Name: ondemand-24xl
@@ -22,9 +31,13 @@ Scheduling:
       AllocationStrategy: lowest-price
       Networking:
         SubnetIds:
-          - subnet-074660a6fc92af350
+          - subnet-0e49c2791ab2df5e2
         AdditionalSecurityGroups:
-          - sg-0f504cd36a5dc0b34
+          - sg-09a43254e7e8383b1
+      Iam:
+        S3Access:
+          - BucketName: dzhang-imi-gchp-output
+            EnableWriteAccess: true
       ComputeResources:
         - Name: cpu24xl
           Instances:
@@ -38,45 +51,116 @@ Scheduling:
           Efa:
             Enabled: false
 
-    - Name: spot-24xl
+    - Name: spot48cores
       CapacityType: SPOT
       AllocationStrategy: capacity-optimized
       Networking:
         SubnetIds:
-          - subnet-074660a6fc92af350
+          - subnet-0e49c2791ab2df5e2
         AdditionalSecurityGroups:
-          - sg-0f504cd36a5dc0b34
+          - sg-09a43254e7e8383b1
+      Iam:
+        S3Access:
+          - BucketName: dzhang-imi-gchp-output
+            EnableWriteAccess: true
       ComputeResources:
-        - Name: cpu24xl
+        - Name: cpu48cores
           Instances:
             - InstanceType: c5.24xlarge
+            - InstanceType: c5.metal
+            - InstanceType: c5a.24xlarge
+            - InstanceType: c5ad.24xlarge
             - InstanceType: c6i.24xlarge
+            - InstanceType: c6a.24xlarge
             - InstanceType: c7i.24xlarge
+            - InstanceType: c7i.metal-24xl
             - InstanceType: c8i.24xlarge
           MinCount: 0
-          MaxCount: 50
+          MaxCount: 1000
           DisableSimultaneousMultithreading: true
           Efa:
             Enabled: false
+        - Name: cpu24cores          # 48 vCPU / 24 cores
+          Instances:
+            - InstanceType: m5.12xlarge
+            - InstanceType: m5a.12xlarge
+            - InstanceType: m5ad.12xlarge
+            - InstanceType: m5d.12xlarge
+            - InstanceType: m5dn.12xlarge
+            - InstanceType: m5n.12xlarge
+            - InstanceType: m5zn.12xlarge
+            - InstanceType: m5zn.metal
+            - InstanceType: m6a.12xlarge
+            - InstanceType: m6i.12xlarge
+            - InstanceType: m6id.12xlarge
+            - InstanceType: m6idn.12xlarge
+            - InstanceType: m6in.12xlarge
+            - InstanceType: m7a.12xlarge
+            - InstanceType: m7i-flex.12xlarge
+            - InstanceType: m7i.12xlarge
+            - InstanceType: m8a.12xlarge
+            - InstanceType: m8i-flex.12xlarge
+            - InstanceType: m8i.12xlarge
+            - InstanceType: m8ib.12xlarge
+            - InstanceType: m8id.12xlarge
+            - InstanceType: m8in.12xlarge
+          MinCount: 0
+          MaxCount: 1000
+          DisableSimultaneousMultithreading: false
+          Efa:
+            Enabled: false
  
-    - Name: submit-2xl
+    - Name: submit
       CapacityType: ONDEMAND
       AllocationStrategy: lowest-price
       Networking:
         SubnetIds:
-          - subnet-074660a6fc92af350
+          - subnet-0e49c2791ab2df5e2
         AdditionalSecurityGroups:
-          - sg-0f504cd36a5dc0b34
+          - sg-09a43254e7e8383b1
+      Iam:
+        S3Access:
+          - BucketName: dzhang-imi-gchp-output
+            EnableWriteAccess: true
       ComputeResources:
-        - Name: cpu2xl
+        - Name: cpu8cores
           Instances:
             - InstanceType: c5.2xlarge
+            - InstanceType: c5a.2xlarge
+            - InstanceType: c5ad.2xlarge
             - InstanceType: c6i.2xlarge
+            - InstanceType: c6a.2xlarge
             - InstanceType: c7i.2xlarge
+            - InstanceType: c7i-flex.2xlarge
             - InstanceType: c8i.2xlarge
+            - InstanceType: c8i-flex.2xlarge
           MinCount: 0
-          MaxCount: 10
-          DisableSimultaneousMultithreading: true  # disable hyperthreading (recommended)
+          MaxCount: 500
+          DisableSimultaneousMultithreading: true  # disable hyperthreading
+          Efa:
+            Enabled: false
+        - Name: cpu4cores
+          Instances:
+            - InstanceType: m4.xlarge
+            - InstanceType: m5.xlarge
+            - InstanceType: m5a.xlarge
+            - InstanceType: m5ad.xlarge
+            - InstanceType: m6i.xlarge
+            - InstanceType: m6id.xlarge
+            - InstanceType: m6idn.xlarge
+            - InstanceType: m6in.xlarge
+            - InstanceType: m7a.xlarge
+            - InstanceType: m7i-flex.xlarge
+            - InstanceType: m7i.xlarge
+            - InstanceType: m8a.xlarge
+            - InstanceType: m8i-flex.xlarge
+            - InstanceType: m8i.xlarge
+            - InstanceType: m8ib.xlarge
+            - InstanceType: m8id.xlarge
+            - InstanceType: m8in.xlarge
+          MinCount: 0
+          MaxCount: 500
+          DisableSimultaneousMultithreading: false
           Efa:
             Enabled: false
 
@@ -85,4 +169,9 @@ SharedStorage:
     StorageType: FsxLustre
     MountDir: /fsx_input
     FsxLustreSettings:
-      FileSystemId: fs-03e9bfee5ab98c762
+      FileSystemId: fs-0d329fc3b8db4c61a
+  - Name: fsx_output
+    StorageType: FsxLustre
+    MountDir: /fsx_output
+    FsxLustreSettings:
+      FileSystemId: fs-097852624dcf1638b
