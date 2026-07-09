@@ -228,13 +228,15 @@ If FSx fails:
 - Re-import from S3
 - No data loss
 
-Output Data (Write-Back)
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+Output Data (Write-Back w/o DELETED)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - **Working location**: FSx scratch
 - **Backup location**: S3 (separate bucket or prefix)
 - **DRA policy**:
-  - Export enabled (auto-export or manual)
+  
+  - Export enabled: NEW, CHANGED (w/o DELETED so that files deleted on FSx are still retained in S3. We manually delete S3 data for safety.)
+
 - Output data is continuously or periodically written to S3
 
 If FSx fails:
