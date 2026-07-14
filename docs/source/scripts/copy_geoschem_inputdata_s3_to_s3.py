@@ -2,279 +2,656 @@
 # -*- coding: utf-8 -*-
 
 """
-Mirror GEOS-Chem ExtData referenced in a dry-run log from s3://gcgrid into
-a destination S3 bucket/prefix.
+Mirror GEOS-Chem ExtData referenced by a dry-run log from a source S3
+bucket (default: public s3://gcgrid) into a destination S3 bucket/prefix.
 
-Default behavior:
-- Copy BOTH "found" (Opening/Reading) and "missing" (REQUIRED FILE NOT FOUND)
-- Skip objects that already exist at destination (sync-like)
+Performance features
+--------------------
+1. Copies multiple objects concurrently.
+2. In --mode auto, tries S3 server-side copy first.
+3. If server-side copy is not permitted, automatically falls back to
+   unsigned GET + signed streaming upload.
+4. Skips existing destination objects unless --overwrite is specified.
+5. Uses connection pooling, retries, and managed multipart transfers.
 
-Source bucket access: unsigned (public).
-Destination uploads: signed (your AWS credentials/role).
+Examples
+--------
+Dry run:
+    python copy_geoschem_inputdata_s3_to_s3.py gchp.dryrun.log \
+        --dest-bucket my-bucket \
+        --dest-prefix ExtData/ \
+        --workers 16 \
+        --dryrun
 
-Usage:
-  python mirror_extdata_from_log.py <dryrun_log> \
-    --dest-bucket <bucket> \
-    [--dest-prefix ExtData/] \
-    [--only-missing | --include-found] \
-    [--dryrun] [--overwrite]
+Actual transfer:
+    python copy_geoschem_inputdata_s3_to_s3.py gchp.dryrun.log \
+        --dest-bucket my-bucket \
+        --dest-prefix ExtData/ \
+        --workers 16
+
+Only files reported missing by GEOS-Chem:
+    python copy_geoschem_inputdata_s3_to_s3.py gchp.dryrun.log \
+        --dest-bucket my-bucket \
+        --only-missing \
+        --workers 16
+
+If the destination is empty and overwriting is acceptable, --overwrite
+avoids one destination HEAD request per object:
+    python copy_geoschem_inputdata_s3_to_s3.py gchp.dryrun.log \
+        --dest-bucket my-bucket \
+        --workers 16 \
+        --overwrite
 """
 
+from __future__ import annotations
+
+import argparse
 import os
-import sys
 import re
+import sys
+import threading
+from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+
 import boto3
+from boto3.s3.transfer import TransferConfig
 from botocore import UNSIGNED
-from botocore.client import Config
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
 
-SRC_BUCKET = "gcgrid"
-DEFAULT_DEST_PREFIX = "ExtData/"  # recommended
+DEFAULT_SOURCE_BUCKET = "gcgrid"
+DEFAULT_DEST_PREFIX = "ExtData/"
+DEFAULT_WORKERS = 16
+
+# Preserve the substitution behavior from the original script:
+# read the corrected filename from gcgrid, but save it at the destination
+# using the filename expected by GEOS-Chem.
+FILENAME_SUBSTITUTIONS = {
+    "IPMN": "PMN",
+    "NPMN": "PMN",
+    "RIPA": "RIP",
+    "RIPB": "RIP",
+    "RIPD": "RIP",
+}
+
+PRINT_LOCK = threading.Lock()
+SERVER_COPY_DISABLED = threading.Event()
+SERVER_COPY_NOTICE_PRINTED = threading.Event()
 
 
-def extract_paths_from_log(dryrun_log: str):
-    """
-    Parse dry-run log and return (found_paths, missing_paths).
-    We normalize CHEM_INPUTS// to CHEM_INPUTS/.
-    """
-    found = set()
-    missing = set()
+@dataclass(frozen=True)
+class TransferJob:
+    source_key: str
+    destination_key: str
 
-    with open(dryrun_log, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.replace("CHEM_INPUTS//", "CHEM_INPUTS/")
-            up = line.upper()
 
-            if ": OPENING" in up or ": READING" in up:
-                # last token is the path
-                found.add(line.split()[-1])
+@dataclass
+class TransferResult:
+    status: str
+    job: TransferJob
+    method: str = ""
+    error: str = ""
 
-            elif "REQUIRED FILE NOT FOUND" in up or "FILE NOT FOUND" in up:
-                missing.add(line.split()[-1])
+
+def log(message: str) -> None:
+    """Print one complete line without mixing output from worker threads."""
+    with PRINT_LOCK:
+        print(message, flush=True)
+
+
+def normalize_log_path(value: str) -> str:
+    """Remove common quoting/punctuation around a path extracted from a log."""
+    return value.strip().strip("'\";,()[]{}")
+
+
+def extract_paths_from_log(dryrun_log: str) -> tuple[list[str], list[str]]:
+    """Return sorted (found_paths, missing_paths) parsed from a dry-run log."""
+    found: set[str] = set()
+    missing: set[str] = set()
+
+    with open(dryrun_log, "r", encoding="utf-8", errors="replace") as handle:
+        for raw_line in handle:
+            line = raw_line.replace("CHEM_INPUTS//", "CHEM_INPUTS/")
+            upper = line.upper()
+            fields = line.split()
+
+            if not fields:
+                continue
+
+            path = normalize_log_path(fields[-1])
+
+            if ": OPENING" in upper or ": READING" in upper:
+                found.add(path)
+            elif "REQUIRED FILE NOT FOUND" in upper or "FILE NOT FOUND" in upper:
+                missing.add(path)
 
     return sorted(found), sorted(missing)
 
 
 def extdata_rel_key_from_path(path: str) -> str | None:
     """
-    Extract key relative to ExtData/ from an absolute path.
+    Extract the object key relative to ExtData/.
 
-    Example:
-      /.../ExtData/HEMCO/CH4/v2024-01/foo.nc
-    returns:
-      HEMCO/CH4/v2024-01/foo.nc
+    Example
+    -------
+    /some/path/ExtData/HEMCO/CH4/file.nc
+        -> HEMCO/CH4/file.nc
     """
-    m = re.search(r"ExtData/(.+)", path)
-    return m.group(1) if m else None
+    match = re.search(r"(?:^|/)ExtData/(.+)", path)
+    if not match:
+        return None
+
+    key = match.group(1).lstrip("/")
+    return key or None
 
 
-def dest_key(dest_prefix: str, ext_rel_key: str) -> str:
-    dp = dest_prefix.strip("/")
-    return f"{dp}/{ext_rel_key}" if dp else ext_rel_key
+def make_destination_key(destination_prefix: str, extdata_relative_key: str) -> str:
+    prefix = destination_prefix.strip("/")
+    return f"{prefix}/{extdata_relative_key}" if prefix else extdata_relative_key
 
 
-def dest_exists(dst_s3, bucket: str, key: str) -> bool:
-    try:
-        dst_s3.head_object(Bucket=bucket, Key=key)
-        return True
-    except ClientError as e:
-        code = e.response.get("Error", {}).get("Code", "")
-        if code in ("404", "NoSuchKey", "NotFound"):
-            return False
-        if code in ("403", "AccessDenied"):
-            # can't head; treat as missing so we attempt upload
-            return False
-        raise
+def corrected_source_key(expected_key: str) -> str:
+    """Apply at most one filename substitution, matching the original behavior."""
+    directory, separator, filename = expected_key.rpartition("/")
+
+    for wrong, correct in FILENAME_SUBSTITUTIONS.items():
+        if wrong in filename:
+            corrected_filename = filename.replace(wrong, correct)
+            return f"{directory}{separator}{corrected_filename}"
+
+    return expected_key
 
 
-def copy_streaming(src_s3_unsigned, dst_s3_signed,
-                   src_bucket: str, src_key: str,
-                   dst_bucket: str, dst_key: str,
-                   dryrun: bool, overwrite: bool):
-    """
-    Robust S3->S3 copy:
-    - unsigned get_object() from public src
-    - upload_fileobj() to dest
-    """
-    if dryrun:
-        print(f"[DRYRUN] s3://{src_bucket}/{src_key} -> s3://{dst_bucket}/{dst_key}")
-        return "dryrun"
-
-    if not overwrite and dest_exists(dst_s3_signed, dst_bucket, dst_key):
-        print(f"[SKIP]   exists s3://{dst_bucket}/{dst_key}")
-        return "skipped"
-
-    try:
-        obj = src_s3_unsigned.get_object(Bucket=src_bucket, Key=src_key)
-        body = obj["Body"]
-
-        extra = {}
-        if obj.get("ContentType"):
-            extra["ContentType"] = obj["ContentType"]
-
-        dst_s3_signed.upload_fileobj(
-            Fileobj=body,
-            Bucket=dst_bucket,
-            Key=dst_key,
-            ExtraArgs=extra if extra else None,
-        )
-        print(f"[OK]     s3://{src_bucket}/{src_key} -> s3://{dst_bucket}/{dst_key}")
-        return "copied"
-
-    except ClientError as e:
-        print(f"[FAIL]   s3://{src_bucket}/{src_key} -> s3://{dst_bucket}/{dst_key}: {e}")
-        return "failed"
-
-
-def mirror_from_log(dryrun_log: str,
-                    dest_bucket: str,
-                    dest_prefix: str,
-                    include_found: bool,
-                    dryrun: bool,
-                    overwrite: bool):
+def build_jobs(
+    dryrun_log: str,
+    destination_prefix: str,
+    include_found: bool,
+) -> tuple[list[TransferJob], int, int]:
     found_paths, missing_paths = extract_paths_from_log(dryrun_log)
 
-    # Choose which sets to mirror
+    candidate_paths: Iterable[str]
     if include_found:
-        candidate_paths = found_paths + missing_paths
+        candidate_paths = (*found_paths, *missing_paths)
     else:
         candidate_paths = missing_paths
 
-    # Extract ExtData keys only
-    ext_keys = []
-    for p in candidate_paths:
-        k = extdata_rel_key_from_path(p)
-        if k:
-            ext_keys.append(k)
+    expected_keys: set[str] = set()
+    ignored = 0
 
-    # Deduplicate keys
-    ext_keys = sorted(set(ext_keys))
+    for path in candidate_paths:
+        relative_key = extdata_rel_key_from_path(path)
+        if relative_key is None:
+            ignored += 1
+            continue
+        expected_keys.add(relative_key)
 
-    print("=============Mirror ExtData referenced by dry-run log=============")
-    print(f"Log:        {dryrun_log}")
-    print(f"Source:     s3://{SRC_BUCKET}/")
-    print(f"Dest:       s3://{dest_bucket}/{dest_prefix.strip('/')}/" if dest_prefix else f"Dest: s3://{dest_bucket}/")
-    print(f"Mode:       {'found+missing' if include_found else 'missing-only'}")
-    print(f"Objects:    {len(ext_keys)}")
-    print(f"Dryrun:     {dryrun} | Overwrite: {overwrite}")
-    print("===================================================================")
+    jobs = [
+        TransferJob(
+            source_key=corrected_source_key(key),
+            destination_key=make_destination_key(destination_prefix, key),
+        )
+        for key in sorted(expected_keys)
+    ]
 
-    src_s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-    dst_s3 = boto3.client("s3")
+    return jobs, len(found_paths), len(missing_paths)
 
-    substitutions = {
-        "IPMN": "PMN",
-        "NPMN": "PMN",
-        "RIPA": "RIP",
-        "RIPB": "RIP",
-        "RIPD": "RIP",
+
+def destination_exists(s3_client, bucket: str, key: str) -> bool:
+    try:
+        s3_client.head_object(Bucket=bucket, Key=key)
+        return True
+    except ClientError as exc:
+        error = exc.response.get("Error", {})
+        code = str(error.get("Code", ""))
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+
+        if code in {"404", "NoSuchKey", "NotFound"} or status == 404:
+            return False
+
+        # A role may have PutObject permission but not HeadObject/GetObject.
+        # In that situation, attempt the write rather than stopping here.
+        if code in {"403", "AccessDenied"} or status == 403:
+            return False
+
+        raise
+
+
+def server_copy_is_unavailable(exc: BaseException) -> bool:
+    """Identify failures for which unsigned streaming is worth trying."""
+    codes = {
+        "403",
+        "405",
+        "AccessDenied",
+        "InvalidRequest",
+        "MethodNotAllowed",
+        "NotImplemented",
     }
 
-    counts = {"copied": 0, "skipped": 0, "failed": 0, "dryrun": 0}
+    if isinstance(exc, ClientError):
+        error = exc.response.get("Error", {})
+        code = str(error.get("Code", ""))
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if code in codes or status in {403, 405, 501}:
+            return True
 
-    for ext_rel in ext_keys:
-        src_key = ext_rel
-        dst_key = dest_key(dest_prefix, ext_rel)
-
-        filename = os.path.basename(src_key)
-
-        # Preserve your special substitution behavior:
-        # Fetch corrected source name, but store using original expected name.
-        did_sub = False
-        for wrong, correct in substitutions.items():
-            if wrong in filename:
-                corrected_src_key = src_key.replace(wrong, correct)
-                status = copy_streaming(
-                    src_s3, dst_s3,
-                    SRC_BUCKET, corrected_src_key,
-                    dest_bucket, dst_key,
-                    dryrun=dryrun,
-                    overwrite=overwrite,
-                )
-                counts[status] += 1
-                did_sub = True
-                break
-
-        if did_sub:
-            continue
-
-        status = copy_streaming(
-            src_s3, dst_s3,
-            SRC_BUCKET, src_key,
-            dest_bucket, dst_key,
-            dryrun=dryrun,
-            overwrite=overwrite,
-        )
-        counts[status] += 1
-
-    print("===================================================================")
-    print(f"Done. copied={counts['copied']} skipped={counts['skipped']} failed={counts['failed']}" +
-          (f" dryrun={counts['dryrun']}" if dryrun else ""))
-    print("===================================================================")
+    text = str(exc)
+    return any(token in text for token in codes)
 
 
-def parse_args():
-    if len(sys.argv) < 2:
-        raise ValueError("Usage: python mirror_extdata_from_log.py <dryrun_log> --dest-bucket <bucket> [--dest-prefix P] [--only-missing] [--dryrun] [--overwrite]")
-
-    dryrun_log = None
-    dest_bucket = None
-    dest_prefix = DEFAULT_DEST_PREFIX
-    include_found = True
-    dryrun = False
-    overwrite = False
-
-    argv = sys.argv[1:]
-    i = 0
-    while i < len(argv):
-        a = argv[i]
-
-        if dryrun_log is None and not a.startswith("-"):
-            dryrun_log = a
-            i += 1
-            continue
-
-        if a == "--dest-bucket":
-            dest_bucket = argv[i + 1]
-            i += 2
-        elif a == "--dest-prefix":
-            dest_prefix = argv[i + 1]
-            i += 2
-        elif a == "--only-missing":
-            include_found = False
-            i += 1
-        elif a == "--include-found":
-            include_found = True
-            i += 1
-        elif a == "--dryrun":
-            dryrun = True
-            i += 1
-        elif a == "--overwrite":
-            overwrite = True
-            i += 1
-        else:
-            raise ValueError(f"Unknown argument: {a}")
-
-    if dryrun_log is None:
-        raise ValueError("You must provide a dryrun log file as the first argument.")
-    if dest_bucket is None:
-        raise ValueError("Missing required argument: --dest-bucket")
-
-    return dryrun_log, dest_bucket, dest_prefix, include_found, dryrun, overwrite
-
-
-def main():
-    dryrun_log, dest_bucket, dest_prefix, include_found, dryrun, overwrite = parse_args()
-    mirror_from_log(
-        dryrun_log=dryrun_log,
-        dest_bucket=dest_bucket,
-        dest_prefix=dest_prefix,
-        include_found=include_found,
-        dryrun=dryrun,
-        overwrite=overwrite,
+def copy_server_side(
+    source_client,
+    destination_client,
+    source_bucket: str,
+    source_key: str,
+    destination_bucket: str,
+    destination_key: str,
+    transfer_config: TransferConfig,
+) -> None:
+    """Ask S3 to copy the object directly without routing bytes through Python."""
+    destination_client.copy(
+        CopySource={"Bucket": source_bucket, "Key": source_key},
+        Bucket=destination_bucket,
+        Key=destination_key,
+        SourceClient=source_client,
+        Config=transfer_config,
     )
 
 
+def copy_streaming(
+    source_client,
+    destination_client,
+    source_bucket: str,
+    source_key: str,
+    destination_bucket: str,
+    destination_key: str,
+    transfer_config: TransferConfig,
+) -> None:
+    """Unsigned GET from source followed by signed upload to destination."""
+    body = None
+
+    try:
+        response = source_client.get_object(Bucket=source_bucket, Key=source_key)
+        body = response["Body"]
+
+        upload_args = {
+            "Fileobj": body,
+            "Bucket": destination_bucket,
+            "Key": destination_key,
+            "Config": transfer_config,
+        }
+
+        content_type = response.get("ContentType")
+        if content_type:
+            upload_args["ExtraArgs"] = {"ContentType": content_type}
+
+        destination_client.upload_fileobj(**upload_args)
+    finally:
+        if body is not None:
+            body.close()
+
+
+def transfer_one(
+    job: TransferJob,
+    *,
+    source_client,
+    destination_client,
+    source_bucket: str,
+    destination_bucket: str,
+    mode: str,
+    overwrite: bool,
+    dryrun: bool,
+    server_copy_config: TransferConfig,
+    streaming_config: TransferConfig,
+) -> TransferResult:
+    source_uri = f"s3://{source_bucket}/{job.source_key}"
+    destination_uri = f"s3://{destination_bucket}/{job.destination_key}"
+
+    if dryrun:
+        log(f"[DRYRUN:{mode}] {source_uri} -> {destination_uri}")
+        return TransferResult("dryrun", job, method=mode)
+
+    try:
+        if not overwrite and destination_exists(
+            destination_client, destination_bucket, job.destination_key
+        ):
+            log(f"[SKIP]        exists {destination_uri}")
+            return TransferResult("skipped", job)
+
+        if mode == "stream":
+            copy_streaming(
+                source_client,
+                destination_client,
+                source_bucket,
+                job.source_key,
+                destination_bucket,
+                job.destination_key,
+                streaming_config,
+            )
+            log(f"[OK:stream]   {source_uri} -> {destination_uri}")
+            return TransferResult("copied", job, method="stream")
+
+        if mode == "server":
+            copy_server_side(
+                source_client,
+                destination_client,
+                source_bucket,
+                job.source_key,
+                destination_bucket,
+                job.destination_key,
+                server_copy_config,
+            )
+            log(f"[OK:server]   {source_uri} -> {destination_uri}")
+            return TransferResult("copied", job, method="server")
+
+        # mode == "auto"
+        if not SERVER_COPY_DISABLED.is_set():
+            try:
+                copy_server_side(
+                    source_client,
+                    destination_client,
+                    source_bucket,
+                    job.source_key,
+                    destination_bucket,
+                    job.destination_key,
+                    server_copy_config,
+                )
+                log(f"[OK:server]   {source_uri} -> {destination_uri}")
+                return TransferResult("copied", job, method="server")
+            except Exception as exc:
+                if not server_copy_is_unavailable(exc):
+                    raise
+
+                SERVER_COPY_DISABLED.set()
+                if not SERVER_COPY_NOTICE_PRINTED.is_set():
+                    with PRINT_LOCK:
+                        if not SERVER_COPY_NOTICE_PRINTED.is_set():
+                            print(
+                                "[INFO] Server-side copy was not permitted; "
+                                "using unsigned GET + streaming upload instead.",
+                                flush=True,
+                            )
+                            SERVER_COPY_NOTICE_PRINTED.set()
+
+        copy_streaming(
+            source_client,
+            destination_client,
+            source_bucket,
+            job.source_key,
+            destination_bucket,
+            job.destination_key,
+            streaming_config,
+        )
+        log(f"[OK:stream]   {source_uri} -> {destination_uri}")
+        return TransferResult("copied", job, method="stream")
+
+    except (ClientError, BotoCoreError, OSError, Exception) as exc:
+        # The broad catch is intentional: one failed object should not terminate
+        # all other concurrent transfers.
+        message = str(exc).replace("\n", " ")
+        log(f"[FAIL]        {source_uri} -> {destination_uri}: {message}")
+        return TransferResult("failed", job, error=message)
+
+
+def make_clients(
+    *,
+    profile: str | None,
+    region: str | None,
+    workers: int,
+):
+    session_kwargs = {}
+    if profile:
+        session_kwargs["profile_name"] = profile
+    if region:
+        session_kwargs["region_name"] = region
+
+    session = boto3.session.Session(**session_kwargs)
+    pool_size = max(32, workers * 4)
+
+    common_config = {
+        "max_pool_connections": pool_size,
+        "connect_timeout": 20,
+        "read_timeout": 120,
+        "retries": {"mode": "standard", "max_attempts": 10},
+    }
+
+    source_client = session.client(
+        "s3",
+        config=Config(signature_version=UNSIGNED, **common_config),
+    )
+    destination_client = session.client("s3", config=Config(**common_config))
+
+    return source_client, destination_client
+
+
+def write_failed_file(path: str, failures: list[TransferResult]) -> None:
+    if not failures:
+        return
+
+    output = Path(path)
+    with output.open("w", encoding="utf-8") as handle:
+        handle.write("source_key\tdestination_key\terror\n")
+        for result in failures:
+            error = result.error.replace("\t", " ").replace("\n", " ")
+            handle.write(
+                f"{result.job.source_key}\t"
+                f"{result.job.destination_key}\t"
+                f"{error}\n"
+            )
+
+    log(f"Failed-object report: {output.resolve()}")
+
+
+def positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be at least 1")
+    return parsed
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Mirror GEOS-Chem ExtData paths from a dry-run log into an S3 bucket."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser.add_argument("dryrun_log", help="GEOS-Chem dry-run log file")
+    parser.add_argument(
+        "--source-bucket",
+        default=DEFAULT_SOURCE_BUCKET,
+        help="public source S3 bucket",
+    )
+    parser.add_argument("--dest-bucket", required=True, help="destination S3 bucket")
+    parser.add_argument(
+        "--dest-prefix",
+        default=DEFAULT_DEST_PREFIX,
+        help="destination key prefix; pass an empty string for bucket root",
+    )
+    parser.add_argument(
+        "--workers",
+        type=positive_int,
+        default=DEFAULT_WORKERS,
+        help="number of objects transferred concurrently",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("auto", "server", "stream"),
+        default="auto",
+        help=(
+            "auto tries server-side copy and falls back to streaming; "
+            "server never falls back; stream always routes data through this host"
+        ),
+    )
+
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
+        "--only-missing",
+        action="store_true",
+        help="copy only paths reported as missing",
+    )
+    selection.add_argument(
+        "--include-found",
+        action="store_true",
+        help="copy both found and missing paths (the default)",
+    )
+
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="overwrite destination objects and skip destination HEAD checks",
+    )
+    parser.add_argument(
+        "--dryrun",
+        action="store_true",
+        help="print planned transfers without contacting S3",
+    )
+    parser.add_argument(
+        "--profile",
+        help="AWS profile used for destination access",
+    )
+    parser.add_argument(
+        "--region",
+        help="AWS region for the clients; otherwise use normal AWS configuration",
+    )
+    parser.add_argument(
+        "--failed-file",
+        default="mirror_extdata_failed.tsv",
+        help="write failed source/destination keys here",
+    )
+
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.dryrun_log):
+        parser.error(f"dry-run log does not exist: {args.dryrun_log}")
+
+    return args
+
+
+def main() -> int:
+    args = parse_args()
+    include_found = not args.only_missing
+
+    jobs, found_count, missing_count = build_jobs(
+        args.dryrun_log,
+        args.dest_prefix,
+        include_found,
+    )
+
+    destination_root = (
+        f"s3://{args.dest_bucket}/{args.dest_prefix.strip('/')}/"
+        if args.dest_prefix.strip("/")
+        else f"s3://{args.dest_bucket}/"
+    )
+
+    print("================ GEOS-Chem ExtData mirror ================")
+    print(f"Log:               {args.dryrun_log}")
+    print(f"Source:            s3://{args.source_bucket}/")
+    print(f"Destination:       {destination_root}")
+    print(f"Log found paths:   {found_count}")
+    print(f"Log missing paths: {missing_count}")
+    print(f"Unique objects:    {len(jobs)}")
+    print(f"Selection:         {'found + missing' if include_found else 'missing only'}")
+    print(f"Mode:              {args.mode}")
+    print(f"Workers:           {args.workers}")
+    print(f"Dry run:           {args.dryrun}")
+    print(f"Overwrite:         {args.overwrite}")
+    print("===========================================================")
+
+    if not jobs:
+        print("No ExtData object keys were found in the selected log lines.")
+        return 0
+
+    # A dry run does not need credentials or network access.
+    if args.dryrun:
+        source_client = None
+        destination_client = None
+    else:
+        source_client, destination_client = make_clients(
+            profile=args.profile,
+            region=args.region,
+            workers=args.workers,
+        )
+
+    # One outer worker handles one object. The server-side transfer manager may
+    # use a few additional threads only when a single object needs multipart copy.
+    server_copy_config = TransferConfig(
+        multipart_threshold=64 * 1024 * 1024,
+        multipart_chunksize=64 * 1024 * 1024,
+        max_concurrency=4,
+        use_threads=True,
+    )
+
+    # Streaming transfers are already parallelized across objects, so avoid a
+    # second large per-object thread pool.
+    streaming_config = TransferConfig(
+        multipart_threshold=64 * 1024 * 1024,
+        multipart_chunksize=16 * 1024 * 1024,
+        max_concurrency=1,
+        use_threads=False,
+    )
+
+    counts: Counter[str] = Counter()
+    methods: Counter[str] = Counter()
+    failures: list[TransferResult] = []
+
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        future_to_job: dict[Future[TransferResult], TransferJob] = {
+            executor.submit(
+                transfer_one,
+                job,
+                source_client=source_client,
+                destination_client=destination_client,
+                source_bucket=args.source_bucket,
+                destination_bucket=args.dest_bucket,
+                mode=args.mode,
+                overwrite=args.overwrite,
+                dryrun=args.dryrun,
+                server_copy_config=server_copy_config,
+                streaming_config=streaming_config,
+            ): job
+            for job in jobs
+        }
+
+        try:
+            for future in as_completed(future_to_job):
+                result = future.result()
+                counts[result.status] += 1
+                if result.method:
+                    methods[result.method] += 1
+                if result.status == "failed":
+                    failures.append(result)
+        except KeyboardInterrupt:
+            log("\n[INTERRUPTED] Cancelling transfers that have not started...")
+            for future in future_to_job:
+                future.cancel()
+            return 130
+
+    if failures:
+        write_failed_file(args.failed_file, failures)
+
+    print("===========================================================")
+    print(
+        "Done: "
+        f"copied={counts['copied']} "
+        f"skipped={counts['skipped']} "
+        f"failed={counts['failed']} "
+        f"dryrun={counts['dryrun']}"
+    )
+    if counts["copied"]:
+        print(
+            "Copy methods: "
+            f"server={methods['server']} "
+            f"stream={methods['stream']}"
+        )
+    print("===========================================================")
+
+    return 1 if failures else 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

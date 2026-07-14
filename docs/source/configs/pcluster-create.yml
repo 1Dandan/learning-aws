@@ -109,7 +109,49 @@ Scheduling:
           DisableSimultaneousMultithreading: false
           Efa:
             Enabled: false
- 
+
+    - Name: spot64cores-efa
+      CapacityType: SPOT
+      AllocationStrategy: capacity-optimized
+      Networking:
+        SubnetIds:
+          - subnet-0e49c2791ab2df5e2
+        AdditionalSecurityGroups:
+          - sg-09a43254e7e8383b1
+        PlacementGroup:
+          Enabled: true
+      Iam:
+        S3Access:
+          - BucketName: dzhang-imi-gchp-output
+            EnableWriteAccess: true
+      ComputeResources:
+        - Name: cpu64cores-256g
+          Instances:
+            - InstanceType: c6i.32xlarge
+            - InstanceType: c6id.32xlarge
+            - InstanceType: c6id.metal
+            - InstanceType: c6in.32xlarge
+            - InstanceType: c6i.metal
+            - InstanceType: c6in.metal
+          MinCount: 0
+          MaxCount: 20
+          DisableSimultaneousMultithreading: true
+          Efa:
+            Enabled: true
+        - Name: cpu64cores-512g
+          Instances:
+            - InstanceType: m6in.32xlarge
+            - InstanceType: m6id.32xlarge
+            - InstanceType: m6idn.32xlarge
+            - InstanceType: m6in.metal
+            - InstanceType: m6id.metal
+            - InstanceType: m6idn.metal
+          MinCount: 0
+          MaxCount: 20
+          DisableSimultaneousMultithreading: true
+          Efa:
+            Enabled: true
+
     - Name: submit
       CapacityType: ONDEMAND
       AllocationStrategy: lowest-price

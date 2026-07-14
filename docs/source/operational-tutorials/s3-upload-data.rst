@@ -72,6 +72,7 @@ Downloading scripts tutorials
         <dryrun_log> \
         --dest-bucket <bucket> \
         [--dest-prefix <prefix>] \
+        [--workers <num_procs>]
         [--dryrun]
     
     An example dry run::
@@ -80,6 +81,7 @@ Downloading scripts tutorials
         geoschem.dryrun.log \
         --dest-bucket dzhang-imi-gchp-test \
         --dest-prefix ExtData \
+        --workers 16 \
         --dryrun
     
     You will see similar output::
