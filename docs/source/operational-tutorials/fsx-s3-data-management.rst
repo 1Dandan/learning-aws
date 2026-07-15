@@ -76,13 +76,7 @@ Example::
 
 This method is sufficient for most workflows and requires no manual action.
 
-Method 2: Batch Metadata Import (Recommended After Creation)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-To ensure the full directory structure appears immediately, run a
-metadata import task.
-
-Auto-import policies are enabled by default, you can check by:
+You can select auto-import policies when creating a DRA:
 
   - Checking Auto-Import Policies via AWS Console
 
@@ -155,11 +149,8 @@ Auto-import policies are enabled by default, you can check by:
     - All file contents have already been copied to FSx
     - FSx remains usable if the S3 bucket is deleted
 
-    To fully copy all data from S3 to FSx, an explicit
-    ``IMPORT_FROM_REPOSITORY`` task must be executed.
 
-
-    Example::
+    CLI to import metadata if auto-import is not enabled::
 
         aws fsx create-data-repository-task \
             --type IMPORT_METADATA_FROM_REPOSITORY \
@@ -170,32 +161,27 @@ Auto-import policies are enabled by default, you can check by:
 
     This imports **only metadata**, not file contents.
 
-Method 3: Full Data Import (Required Before Deleting S3)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Full Data Content Import (Required Before Deleting S3)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If you intend to delete the associated S3 bucket or make FSx
-fully self-contained, you **must explicitly import all data**.
+If you intend to delete the associated S3 bucket or make the FSx file
+system fully self-contained, you **must explicitly preload all file
+contents from S3 into FSx** before deleting the bucket.
 
-Example::
+You can use the Lustre HSM commands to preload file contents from S3
+into FSx or archive file contents from FSx to S3:
 
-  aws fsx create-data-repository-task \
-    --type IMPORT_FROM_REPOSITORY \
-    --file-system-id fs-xxxxxxxx \
-    --paths /ExtData
+* `Preload file contents from S3 into FSx <https://docs.aws.amazon.com/fsx/latest/LustreGuide/preload-file-contents-hsm-dra.html>`_:
 
-This command copies **all file contents** from S3 to FSx.
+  .. code-block:: bash
 
-.. warning::
+    sudo lfs hsm_restore path/to/file
 
-  Do **not** delete the S3 bucket until all
-  ``IMPORT_FROM_REPOSITORY`` tasks complete successfully.
-  DRA availability alone does not guarantee data has been copied.
+* `Archive file contents from FSx to S3 <https://docs.aws.amazon.com/fsx/latest/LustreGuide/exporting-files-hsm.html>`_:
 
-Monitor progress with::
+  .. code-block:: bash
 
-  aws fsx describe-data-repository-tasks
-
-Proceed only when ``Lifecycle = COMPLETED``.
+    sudo lfs hsm_archive path/to/export/file
 
 FSx Storage Capacity Considerations
 -----------------------------------
