@@ -161,8 +161,8 @@ You can select auto-import policies when creating a DRA:
 
     This imports **only metadata**, not file contents.
 
-Full Data Content Import (Required Before Deleting S3)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Method 2: Full Data Content Import/Export (Required Before Deleting S3/FSx)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you intend to delete the associated S3 bucket or make the FSx file
 system fully self-contained, you **must explicitly preload all file
