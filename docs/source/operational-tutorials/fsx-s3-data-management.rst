@@ -239,7 +239,7 @@ When Is It Safe to Delete the S3 Bucket?
 
 It is safe to delete the S3 bucket **only if all of the following are true**:
 
-- Full ``IMPORT_FROM_REPOSITORY`` tasks have completed
+- File exists on FSx with ``hsm_restore`` (no released files on FSx), see `here <https://docs.aws.amazon.com/fsx/latest/LustreGuide/preload-file-contents-hsm-dra.html>`_.
 - FSx storage usage is stable (verified with ``lfs df``)
 - Files remain readable after cache drops
 - You understand that FSx scratch provides no recovery or backups
