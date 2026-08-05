@@ -25,6 +25,7 @@ AWS setup at Harvard
    operational-tutorials/fsx-upload-data
    operational-tutorials/fsx-s3-data-management
    operational-tutorials/pcluster-create
+   operational-tutorials/imi-postprocessing-and-pruning
    operational-tutorials/teardown
 
 .. toctree::
