@@ -8,7 +8,9 @@ data held in S3. Each face is downloaded, processed, pruned, pushed back, and
 then removed locally before the next one starts, so only one face is ever on
 disk.
 
-A face is roughly 0.75 TB, nearly all of it ``OutputDir``.
+Nearly all of a face's storage is ``OutputDir``, and it grows as the runs
+advance, so size the disk against a face at its current progress rather than a
+fixed figure.
 
 See :ref:`imi-pruning-overview` for why the procedure is safe.
 
@@ -22,19 +24,18 @@ Prerequisites
    * - Requirement
      - Notes
    * - conda environment
-     - named in ``CondaEnv``
+     - named in ``CondaEnv``; must have xarray, since ``ncmax`` in
+       ``common.sh`` wraps ``python -c "... xarray ..."``
    * - GEOS-Chem environment file
      - path in ``GEOSChemEnv``
    * - Slurm
      - required; see the caveat below
-   * - nco (``ncmax``)
-     - used for ``nElements`` during setup
    * - ``GCHP/`` at v14.7.0 in the repo root
      - ``setup_imi`` clones it if absent
    * - ``aws`` CLI, configured
      - for download, upload, and object deletion
    * - free disk ≥ one face
-     - roughly 0.75 TB
+     - nearly all of it ``OutputDir``; grows as the runs advance
 
 .. note::
 
@@ -46,30 +47,100 @@ Prerequisites
 One-Time Configuration
 ----------------------
 
-Edit ``config-1yr-c36s10.yml`` once; every per-face config is generated from
-it:
+Edit ``scripts/postprocess/local_env.sh``, **not** the template.
+``config-1yr-c36s10.yml`` keeps its pcluster values so it stays usable there;
+``run_face_local.sh`` overlays the ``CFG_*`` values onto each per-face config
+as it generates it.
 
-.. code-block:: yaml
+.. code-block:: bash
 
-   OutputPath:        /path/to/output
-   DataPath:          /path/to/ExtData
-   DataPathTROPOMI:   /path/to/blended-tropomi
-   BCpath:            /path/to/blended-boundary-conditions
-   RestartFilePrefix: /path/to/.../GEOSChem.BoundaryConditions.
+   LOCAL_ROOT="/path/to/work/root"
 
-   SchedulerPartition: <partition>
-   RequestedCPUs:      <n>
-   RequestedMemory:    <n>G
-   RequestedTime:      <D-HH:MM>
-   InversionCPUs:      <n>
-   InversionMemory:    <n>G
-   InversionTime:      <D-HH:MM>
+   CFG_OutputPath="${LOCAL_ROOT}/output"
+   CFG_DataPath="/path/to/ExtData"
+   CFG_DataPathTROPOMI="/path/to/blended"
+   CFG_BCpath="/path/to/blended-boundary-conditions"
+   CFG_BCversion="v2025-12"
 
-   CondaEnv:    imi-gchp
-   GEOSChemEnv: ${HOME}/gchp.env
+   CFG_CondaEnv="imi-gchp"
+   CFG_GEOSChemEnv='${HOME}/envs/.../gchp.env'
 
-The scripts refuse to start while any path still points at ``/fsx_input`` or
-``/fsx_output``, or does not exist.
+   CFG_SchedulerPartition="part1,part2,part3"
+   CFG_InvSchedulerPartition="${CFG_SchedulerPartition}"
+   CFG_RequestedCPUs="48"
+   CFG_RequestedMemory="180G"
+   CFG_RequestedTime="0-3:30"
+
+A comma-separated partition list lets Slurm place the job wherever frees up
+first. ``InvSchedulerPartition`` is read by ``inversion.sh`` but absent from the
+template, so the overlay appends it.
+
+Anything that should not appear in a public repository — the bucket name, site
+paths — goes in ``local_env.local.sh``, which ``local_env.sh`` sources at the
+end and ``.gitignore`` excludes:
+
+.. code-block:: bash
+
+   S3_BUCKET="my-bucket"
+
+``run_face_local.sh`` refuses to start while any path still points at
+``/fsx_input`` or ``/fsx_output``, or does not exist.
+
+Fetching From S3
+----------------
+
+``fetch_from_s3.sh`` lives inside the tree it fetches, so the first copy on a
+new machine has to come down by hand:
+
+.. code-block:: bash
+
+   aws s3 sync s3://BUCKET/imi-gchp/ /path/to/process-imi-aws/imi-gchp/ \
+       --exclude "*__pycache__/*" --exclude "*.pyc" --exclude "*.DS_Store"
+
+   cd /path/to/process-imi-aws/imi-gchp/scripts/postprocess
+   ./restore_git_modes.sh ../.. --restore
+
+Confirm ``.git`` survived, since the repair reads from it::
+
+   git -C ../.. fsck --no-progress
+   git -C ../.. log --oneline | wc -l      # expect 1279
+
+If it did not, ``git clone`` the repository there instead. After that the
+scripts drive everything:
+
+.. code-block:: bash
+
+   cd scripts/postprocess
+   ./fetch_from_s3.sh code                  # the imi-gchp tree, incl. GCHP/
+   ./fetch_from_s3.sh code --no-gchp        # skip GCHP if the server has one
+   ./fetch_from_s3.sh face T005 --dry-run   # size and free space, no transfer
+   ./fetch_from_s3.sh face T005
+
+   ./push_code_to_s3.sh --dry-run           # send local changes back up
+   ./push_code_to_s3.sh
+
+Each face reports its remote size against local free space before transferring,
+so a full filesystem surfaces before a multi-hundred-gigabyte copy rather than
+during one.
+
+.. warning::
+
+   S3 stores neither symlinks nor POSIX modes. A fetched source tree arrives
+   with executable bits cleared and every symlink rewritten as a regular file
+   holding its own target path — around 700 files across GCHP and its
+   submodules, including ``GCHP/run``, which ``setup_template`` does ``cd``
+   into.
+
+   ``fetch_from_s3.sh code`` runs ``restore_git_modes.sh`` afterwards to put
+   both back. Run it by hand on any tree you copied across another way:
+
+   .. code-block:: bash
+
+      ./restore_git_modes.sh <repo-root>             # survey
+      ./restore_git_modes.sh <repo-root> --restore
+
+   It restores a path only when the working file is byte-identical to the
+   index, so local edits are never discarded.
 
 Automated: One Command Per Face
 --------------------------------
@@ -79,7 +150,7 @@ downloads and verifies but stops before anything is deleted:
 
 .. code-block:: bash
 
-   cd scripts/local
+   cd scripts/postprocess
    ./process_face_cycle.sh BUCKET T001
 
 Then for real:
@@ -139,7 +210,56 @@ Per face it performs:
    never destroyed on the strength of an unchecked upload.
 
 A face that fails at any step is left on disk and reported; the loop continues
-to the next face. Use ``--keep-local`` to skip step 8 entirely.
+to the next face. Step 5 is **not** retried: a failure there needs looking at,
+so the face is left as the run stopped it and can be resumed by hand once the
+cause is understood. Use ``--keep-local`` to skip step 8 entirely.
+
+Every invocation writes ``logs_C36S10/process_face_cycle_<timestamp>.log``,
+alongside the per-face ``imi_output_C36S10_T###.log`` that ``run_imi.sh``
+keeps.
+
+Holding Work Back
+^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - Control
+     - Effect
+   * - ``--stop-file PATH``
+     - halts the whole loop between faces
+   * - ``STOP_PROCESSING`` in a face's run directory
+     - holds back that one face
+
+The per-face file sits beside ``inversion/``. It is checked after the download
+and again immediately before the prune, so it can be dropped in while a face is
+still processing and will still stop it before anything is deleted. It is not
+in the upload list, so it stays local and never reaches the bucket.
+
+What Gets Uploaded
+^^^^^^^^^^^^^^^^^^
+
+Step 7 uploads an explicit list, not "everything except ``OutputDir``":
+
+.. code-block:: text
+
+  jacobian_runs/*/OverpassDiagnostics/*
+  inversion/data_converted/*
+  inversion/data_visualization/*
+  inversion/data_converted_manifest.json
+  CS_grids/overpass_sample_utc_hour.nc
+  .overpass_complete.*  .inversion_complete.*
+  config_*.yml  imi_output.log  .outputdir_pruned.json
+
+A downloaded file carries a local mtime newer than its S3 object, so a
+whole-face sync would push ``Restarts/``, the rest of ``CS_grids/`` and
+``StateVector.nc`` back into the bucket they came from. Those are already
+archived and are left alone.
+
+``CS_grids/overpass_sample_utc_hour.nc`` is the exception worth naming: it is
+built on the first overpass run from an ``OutputDir`` file the prune later
+deletes, so once a face is fully pruned it cannot be regenerated.
 
 Manual: Step by Step
 --------------------
@@ -148,13 +268,12 @@ The same sequence, run by hand, for a single face:
 
 .. code-block:: bash
 
-   cd scripts/local
-   FACE=T001
-   RUN=Global_1yr_2025_C36S10_${FACE}
+   cd scripts/postprocess
+   FACE=T005
    CFG=../../configs_C36S10/config_${FACE}.yml
 
    # 1. download
-   aws s3 sync s3://BUCKET/output/${RUN}/ /path/to/output/${RUN}/
+   ./fetch_from_s3.sh face ${FACE}
 
    # 2. generate the config and preflight paths
    ./run_face_local.sh ${FACE} --dry-run
@@ -175,7 +294,7 @@ The same sequence, run by hand, for a single face:
    ./s3_upload_and_prune.sh ${CFG} BUCKET --deleted-list pruned_${FACE}.txt --execute
 
    # 8. remove the local copy
-   rm -rf /path/to/output/${RUN}
+   rm -rf "${CFG_OutputPath}/Global_1yr_2025_C36S10_${FACE}"
 
 .. note::
 

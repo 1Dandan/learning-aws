@@ -9,19 +9,23 @@ separate: :ref:`imi-pruning-local` and :ref:`imi-pruning-aws`.
 The Problem
 -----------
 
-A one-year global ensemble at C36S10 produces roughly 220 target faces, each
-holding hundreds of Jacobian run directories. Nearly all of the storage is
-``jacobian_runs/*/OutputDir``: hourly 3D GEOS-Chem fields, written so that two
-postprocessing steps can consume them.
+A one-year global ensemble at C36S10 has 220 target faces. Each face holds up
+to seven Jacobian run directories: state vector elements are grouped
+``NumJacobianTracers`` at a time, so at 200 tracers per run a face with 1296
+elements needs seven runs, and a small face with 47 elements needs one.
+
+Nearly all of the storage is ``jacobian_runs/*/OutputDir``: hourly 3D
+GEOS-Chem fields, written so that two postprocessing steps can consume them.
 
 - **Satellite overpass diagnostics** sample those fields at local overpass
   time, producing ``OverpassDiagnostics/``
 - **The inversion** applies the TROPOMI operator, producing
   ``inversion/data_converted/``
 
-Both products are a small fraction of the input. Once they exist and are
-verified, the input is referenced by nothing, and 168 TB can become a fraction
-of that.
+``OutputDir`` **is temporary.** It exists only so those two steps can run, and
+it has to be deleted once they have. Left in place it is what makes the bucket
+unmanageable: 168 TB at present, and growing with every face that finishes.
+The products that replace it are a small fraction of that.
 
 The difficulty is not *how* to delete. It is knowing, without inspecting 220
 faces by hand, that deleting is safe.
@@ -34,7 +38,9 @@ faces by hand, that deleting is safe.
 Directory Layout
 ----------------
 
-Per target face, under ``OutputPath``::
+Per target face, under ``OutputPath``:
+
+.. code-block:: text
 
   Global_1yr_2025_C36S10_T001/
   ├── StateVector.nc
@@ -47,8 +53,8 @@ Per target face, under ``OutputPath``::
   ├── inversion/
   │   ├── data_converted/              <- product
   │   └── data_converted_manifest.json
-  ├── .overpass_complete.<start>_<S>   <- marker
-  └── .inversion_complete.<start>_<S>  <- marker
+  ├── .overpass_complete.<StartDate>_S<S>   <- marker
+  └── .inversion_complete.<StartDate>_S<S>  <- marker
 
 The Shared End Date
 -------------------
@@ -72,18 +78,31 @@ the cutoff becomes ``EndDate-1``.
 The inversion is looser: with ``SatDiagOperator: false`` it reads UTC dates up
 to ``S-1``, and its next round starts at ``S``.
 
+``S`` tracks *progress*, not *intent*. It can exceed ``EndDate`` if ``EndDate``
+is lowered below what has already been simulated, so a sub-range inversion of a
+complete ensemble needs a reworked precomputed-Jacobian path rather than a
+narrowed ``EndDate``.
+
 The Two Markers
 ---------------
 
 Each processing stage writes an empty marker into the run directory on
-successful completion::
+successful completion:
 
-  .overpass_complete.20250101_20250815
-  .inversion_complete.20250101_20250815
+.. code-block:: text
 
-The name carries the window covered. ``S`` grows as runs advance, so writing a
-new marker removes the superseded one: a face holds exactly two markers, never
-two per round.
+  .overpass_complete.20250101_S20250815
+  .inversion_complete.20250101_S20250815
+
+The fields are the configured ``StartDate`` and the shared end date the stage
+ran against. They are **not** a coverage range: overpass output spans local
+dates ``StartDate-1`` to ``S-2``, while ``data_converted`` spans granule dates
+``StartDate`` to ``S-1``. The ``S`` prefix keeps the second field from reading
+as an end date.
+
+What the two markers share is ``S``, which is the point of putting it there.
+``S`` grows as runs advance, so writing a new marker removes the superseded
+one: a face holds exactly two markers, never two per round.
 
 Pruning requires **both markers, carrying the same** ``S``. The cutoff is taken
 from the marker, never recomputed from the checkpoints as they stand at prune
@@ -119,17 +138,46 @@ What the Prune Checks
 
 #. Exactly one marker per stage, both carrying the same start date and ``S``.
 #. The cutoff comes from the marker's ``S``.
-#. Every Jacobian run holds an overpass file for every date in the window,
-   compared as an explicit set rather than a count. A count still matches when
-   one date is missing and another is duplicated.
+#. **Every** Jacobian run directory holds an overpass file for every date in
+   the window, compared as an explicit set rather than a count. A count still
+   matches when one date is missing and another is duplicated.
 #. ``inversion/data_converted`` agrees with its manifest.
 
 Every one of these is a path check. Nothing reads file contents, so the prune
 behaves identically wherever it runs and costs nothing at scale.
 
-Any failure blocks that face and leaves it untouched. A per-face
+Deletion is all-or-nothing per face: ``data_converted`` draws on every
+Jacobian run, so one incomplete run blocks the whole face and no ``OutputDir``
+file is removed from any of its runs. **Reporting** is per run, so an entirely
+unprocessed run is distinguishable from one missing a single date:
+
+.. code-block:: text
+
+  [BLOCKED] ..._T001: 2 of 3 Jacobian run(s) have incomplete overpass output
+      ..._T001_0001: complete (27)
+      ..._T001_0002: 1 of 9 missing, first GEOSChem.CH4col.overpass.20250104_1330.nc4
+      ..._T001_0003: NONE of 9 present -- this run was never processed
+
+The base run expects three files per date, the sampled ``SpeciesConc`` and
+``StateMetLevEdge`` collections on top of ``CH4col``, so its count is higher
+than the others'. The expected counts are derived per run rather than assumed
+uniform.
+
+A failure blocks that face and leaves it untouched. A per-face
 ``.outputdir_pruned.json`` records what was removed and when, which also makes
 a re-run a no-op.
+
+.. warning::
+
+   **Faces processed before the run-indexing fix are missing their last
+   Jacobian run's overpass output.** The driver derived its loop bound from the
+   *number* of run directories rather than their names, so with
+   ``DisableRun0000: true`` it stopped one short; a single-run face got nothing.
+
+   ``data_converted`` is unaffected. Re-run the overpass step for those faces:
+   already-written files are skipped, so only the missing run is computed, and
+   the marker is written once the whole face is complete. A face processed
+   before markers existed simply has none, so the prune blocks it until then.
 
 Why Freshly Written Data Need Not Be Re-Verified
 -------------------------------------------------

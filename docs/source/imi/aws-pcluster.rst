@@ -74,7 +74,7 @@ Always start with a dry run across everything:
 
 .. code-block:: bash
 
-   cd scripts/local
+   cd scripts/postprocess
    ./prune_outputdir.py ../../configs_C36S10/config_T*.yml
 
 This reports, per face, either how much would be freed or exactly which check
@@ -119,7 +119,9 @@ Options
    * - ``--record-deleted FILE``
      - append every deleted path; not needed when autoexport handles S3
 
-To stop a running prune::
+To stop a running prune:
+
+.. code-block:: text
 
   touch /fsx_output/imi-gchp/STOP_PRUNE
 
@@ -128,7 +130,9 @@ It finishes the current face and exits. Remove the file before the next run.
 Reading the Output
 ------------------
 
-Each face reports one line::
+Each face reports one line:
+
+.. code-block:: text
 
   [PRUNED]  Global_1yr_2025_C36S10_T007: deleted 4218 file(s), 731.4 GiB, dated <= 20250813
   [SKIPPED] Global_1yr_2025_C36S10_T008: already pruned through 20250813
@@ -136,6 +140,18 @@ Each face reports one line::
 
 A blocked face is left completely untouched; the loop continues. The exit code
 is 2 if any face was blocked, so a wrapper can notice without parsing output.
+
+When overpass output is incomplete, every run directory is listed, so it is
+clear whether a run is merely missing a date or was never processed:
+
+.. code-block:: text
+
+  [BLOCKED] Global_1yr_2025_C36S10_T009: 2 of 7 Jacobian run(s) have incomplete
+            overpass output for window 20241231..20250813 (235 file(s) missing)
+      Global_1yr_2025_C36S10_T009_0001: complete (678)
+      ...
+      Global_1yr_2025_C36S10_T009_0006: 9 of 226 missing, first GEOSChem.CH4col.overpass.20250104_1330.nc4
+      Global_1yr_2025_C36S10_T009_0007: NONE of 226 present -- this run was never processed
 
 Common blocks and what they mean:
 
@@ -149,8 +165,11 @@ Common blocks and what they mean:
      - the inversion has not finished for this face
    * - ``markers disagree``
      - one stage has advanced past the other; rerun the lagging one
-   * - ``missing N overpass file(s)``
-     - overpass output is incomplete for the marker's window
+   * - ``N of M Jacobian run(s) have incomplete overpass output``
+     - see the per-run listing that follows it
+   * - ``NONE of N present``
+     - that run produced no overpass output at all; see the warning in
+       :ref:`imi-pruning-overview` about the run-indexing fix
    * - ``data_converted disagrees with its manifest``
      - a pickle recorded as written is absent
 
