@@ -25,8 +25,15 @@ AWS setup at Harvard
    operational-tutorials/fsx-upload-data
    operational-tutorials/fsx-s3-data-management
    operational-tutorials/pcluster-create
-   operational-tutorials/imi-postprocessing-and-pruning
    operational-tutorials/teardown
+
+.. toctree::
+   :maxdepth: 2
+   :caption: IMI output management
+
+   imi/overview
+   imi/local-server
+   imi/aws-pcluster
 
 .. toctree::
    :maxdepth: 2
