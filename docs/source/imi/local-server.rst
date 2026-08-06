@@ -365,12 +365,18 @@ deletes, so once a face is fully pruned it cannot be regenerated.
 Manual: Step by Step
 --------------------
 
-The same sequence, run by hand, for a single face, using the variables from
-:ref:`shell-variables`:
+The same sequence, run by hand, for a single face. Repeated here in full so the
+block can be followed start to finish — see :ref:`shell-variables` for what the
+first four lines do:
 
 .. code-block:: bash
 
    cd scripts/postprocess
+   source local_env.sh                    # defines S3_BUCKET, via local_env.local.sh
+
+   BUCKET="$S3_BUCKET"
+   FACE=T005
+   CFG=../../configs_C36S10/config_${FACE}.yml
 
    # 1. download
    ./fetch_from_s3.sh face ${FACE}
