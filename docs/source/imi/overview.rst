@@ -167,6 +167,51 @@ A failure blocks that face and leaves it untouched. A per-face
 ``.outputdir_pruned.json`` records what was removed and when, which also makes
 a re-run a no-op.
 
+What Gets Deleted
+-----------------
+
+Once those checks pass, two things go, both gated identically:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Path
+     - Rule
+   * - ``jacobian_runs/*/OutputDir/GEOSChem.*.nc4``
+     - dated at or before the cutoff
+   * - ``jacobian_runs/*/Restarts/gcchem_internal_checkpoint.*.nc4``
+     - all but the newest per run
+
+Checkpoint pruning mirrors ``prune_checkpoints()`` in
+``gchp_ch4_run.template``, which keeps one. It needs no date comparison of its
+own, and this is worth seeing clearly, because the instinct is to add one:
+
+``S`` is the *minimum across runs* of each run's *maximum* checkpoint date, so
+every run satisfies ``max_i >= S`` by construction — and the marker's ``S`` is
+only ever older than the current one, since runs advance. Keeping each run's
+newest checkpoint therefore already guarantees keeping one at or after ``S``,
+in every run. A date gate would retain extra checkpoints on runs that are
+ahead of the others, and protect nothing.
+
+The checkpoint's existence is itself the statement that everything before it
+was simulated, so one per run carries all the information there is.
+``--keep-checkpoints 2`` holds a fallback; ``0`` skips checkpoint pruning.
+
+.. note::
+
+   Keeping at least one per run is what makes this safe.
+   ``get_shared_end_date`` reads exactly this file set, taking the maximum per
+   run and the minimum across runs, so removing anything below each maximum
+   leaves ``S`` unchanged. Were that not true, pruning would move the very date
+   every marker and cutoff is pinned to.
+
+Unlike ``OutputDir``, checkpoint pruning is not cutoff-gated: a checkpoint
+newer than the cutoff is removed if a newer one still exists. You keep the
+ability to resume each run *forward* from its newest checkpoint, and lose the
+ability to restart from an intermediate date — which pruning ``OutputDir`` has
+already ruled out anyway.
+
 .. warning::
 
    **Faces processed before the run-indexing fix are missing their last

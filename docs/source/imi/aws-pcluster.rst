@@ -114,6 +114,9 @@ Options
        recovery margin
    * - ``--stop-file PATH``
      - halt cleanly between faces once that file exists
+   * - ``--keep-checkpoints N``
+     - newest internal checkpoints kept per Jacobian run; default 1, ``0``
+       disables checkpoint pruning
    * - ``--skip-converted-check``
      - only for a face whose inversion predates manifests
    * - ``--record-deleted FILE``

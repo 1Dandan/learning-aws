@@ -116,12 +116,18 @@ scripts drive everything:
    ./fetch_from_s3.sh face T005 --dry-run   # size and free space, no transfer
    ./fetch_from_s3.sh face T005
 
-   ./push_code_to_s3.sh --dry-run           # send local changes back up
-   ./push_code_to_s3.sh
-
 Each face reports its remote size against local free space before transferring,
 so a full filesystem surfaces before a multi-hundred-gigabyte copy rather than
 during one.
+
+Nothing needs pushing back to run a face — the flow into this machine is
+one-directional. ``push_code_to_s3.sh`` exists for the reverse case: you edited
+a script here and want other machines to pick it up.
+
+.. code-block:: bash
+
+   ./push_code_to_s3.sh --dry-run
+   ./push_code_to_s3.sh
 
 .. warning::
 
@@ -217,6 +223,65 @@ cause is understood. Use ``--keep-local`` to skip step 8 entirely.
 Every invocation writes ``logs_C36S10/process_face_cycle_<timestamp>.log``,
 alongside the per-face ``imi_output_C36S10_T###.log`` that ``run_imi.sh``
 keeps.
+
+Running It in the Background
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The script writes its own log, so backgrounding it needs nothing more than
+detaching. Discard the terminal copy; the ``tee`` inside still writes the file.
+
+.. code-block:: bash
+
+   nohup ./process_face_cycle.sh T005 --execute \
+         --stop-file /path/to/process-imi-aws/STOP_CYCLE \
+         > /dev/null 2>&1 &
+
+   tail -f ../../logs_C36S10/process_face_cycle_*.log
+
+Two files track a run, both under ``logs_C36S10/``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 42 58
+
+   * - File
+     - Contents
+   * - ``process_face_cycle_<timestamp>.log``
+     - one per invocation, so runs never overwrite each other
+   * - ``process_face_cycle.pid``
+     - fixed name: pid, start time, log path, host, command
+
+The PID file is removed however the run ends. A second cycle refuses to start
+while the recorded pid is alive, since two cycles on one face would race on the
+same directory; a stale file from a crashed run is detected and cleared.
+
+.. code-block:: bash
+
+   cat ../../logs_C36S10/process_face_cycle.pid
+   ps -o pid,etime,stat,args -p "$(awk -F= '/^pid=/ {print $2}' \
+       ../../logs_C36S10/process_face_cycle.pid)"
+
+Pass ``--stop-file`` from the start. Without it there is no graceful exit, and
+killing mid-face leaves the work half-done.
+
+.. warning::
+
+   ``run_imi.sh`` sources ``CondaFile`` and then runs ``conda activate``. Many
+   ``.bashrc`` files open with ``[[ $- != *i* ]] && return``, which makes them a
+   no-op under ``nohup``: conda never initialises and the run dies at
+   activation. Check before backgrounding anything:
+
+   .. code-block:: bash
+
+      bash -c 'source ~/.bashrc; conda activate imi-gchp && echo OK'
+
+   If that fails, point ``CFG_CondaFile`` at
+   ``$HOME/miniconda3/etc/profile.d/conda.sh`` instead — the same file
+   ``CONDA_SH`` uses, and it carries no interactivity guard.
+
+On a login node this process mostly sleeps, waiting on ``sbatch -W``, so it is
+undemanding; ``tmux`` or ``screen`` is the more conventional choice if you would
+rather keep it attachable.
 
 Holding Work Back
 ^^^^^^^^^^^^^^^^^
