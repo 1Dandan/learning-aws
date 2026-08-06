@@ -44,6 +44,8 @@ Prerequisites
    overpass step. Without Slurm the overpass stage runs under
    ``UseSlurm: false`` but the inversion stage fails.
 
+.. _one-time-configuration:
+
 One-Time Configuration
 ----------------------
 
@@ -75,16 +77,50 @@ A comma-separated partition list lets Slurm place the job wherever frees up
 first. ``InvSchedulerPartition`` is read by ``inversion.sh`` but absent from the
 template, so the overlay appends it.
 
-Anything that should not appear in a public repository — the bucket name, site
-paths — goes in ``local_env.local.sh``, which ``local_env.sh`` sources at the
-end and ``.gitignore`` excludes:
+Settings that belong to one machine rather than to the workflow — the bucket,
+site paths — go in ``local_env.local.sh``, which ``local_env.sh`` sources at the
+end and ``.gitignore`` excludes. Keeping them out of the tracked file means the
+repository stays portable, and anything you would rather not publish stays
+unpublished:
 
 .. code-block:: bash
 
-   S3_BUCKET="my-bucket"
+   S3_BUCKET="dzhang-imi-gchp-output"
 
 ``run_face_local.sh`` refuses to start while any path still points at
 ``/fsx_input`` or ``/fsx_output``, or does not exist.
+
+.. _shell-variables:
+
+Shell Variables Used Below
+--------------------------
+
+Every example on this page uses these. Set them once per session, so a bucket
+or face name is never retyped into a command that deletes things:
+
+.. code-block:: bash
+
+   cd scripts/postprocess
+   source local_env.sh                    # defines S3_BUCKET, via local_env.local.sh
+
+   BUCKET="$S3_BUCKET"
+   FACE=T005
+   CFG=../../configs_C36S10/config_${FACE}.yml
+
+Taking the bucket from ``local_env.local.sh`` keeps the one machine-specific
+name in one place, rather than repeated across a page where several of the
+commands delete things. Check it arrived before relying on it::
+
+   echo "$BUCKET"
+   dzhang-imi-gchp-output
+
+An empty result means ``local_env.local.sh`` is missing or does not set
+``S3_BUCKET`` — see :ref:`one-time-configuration`.
+
+``BUCKET`` is only needed for the scripts that take it as an argument.
+``process_face_cycle.sh`` falls back to ``S3_BUCKET`` when the argument is
+omitted, and ``fetch_from_s3.sh`` reads it from there always — so on a
+configured machine the bucket usually need not be given at all.
 
 Fetching From S3
 ----------------
@@ -94,7 +130,7 @@ new machine has to come down by hand:
 
 .. code-block:: bash
 
-   aws s3 sync s3://BUCKET/imi-gchp/ /path/to/process-imi-aws/imi-gchp/ \
+   aws s3 sync s3://${BUCKET}/imi-gchp/ /path/to/process-imi-aws/imi-gchp/ \
        --exclude "*__pycache__/*" --exclude "*.pyc" --exclude "*.DS_Store"
 
    cd /path/to/process-imi-aws/imi-gchp/scripts/postprocess
@@ -157,23 +193,23 @@ downloads and verifies but stops before anything is deleted:
 .. code-block:: bash
 
    cd scripts/postprocess
-   ./process_face_cycle.sh BUCKET T001
+   ./process_face_cycle.sh ${BUCKET} T001
 
 Then for real:
 
 .. code-block:: bash
 
-   ./process_face_cycle.sh BUCKET T001 --execute
+   ./process_face_cycle.sh ${BUCKET} T001 --execute
 
 Several faces in sequence, with a way to stop cleanly between them:
 
 .. code-block:: bash
 
-   ./process_face_cycle.sh BUCKET T001 T002 T003 --execute \
+   ./process_face_cycle.sh ${BUCKET} T001 T002 T003 --execute \
        --stop-file /tmp/STOP_CYCLE
 
    # or from a file, one face per line
-   ./process_face_cycle.sh BUCKET --faces-file faces.txt --execute
+   ./process_face_cycle.sh ${BUCKET} --faces-file faces.txt --execute
 
 Per face it performs:
 
@@ -329,13 +365,12 @@ deletes, so once a face is fully pruned it cannot be regenerated.
 Manual: Step by Step
 --------------------
 
-The same sequence, run by hand, for a single face:
+The same sequence, run by hand, for a single face, using the variables from
+:ref:`shell-variables`:
 
 .. code-block:: bash
 
    cd scripts/postprocess
-   FACE=T005
-   CFG=../../configs_C36S10/config_${FACE}.yml
 
    # 1. download
    ./fetch_from_s3.sh face ${FACE}
@@ -356,7 +391,7 @@ The same sequence, run by hand, for a single face:
    ./prune_outputdir.py ${CFG} --execute --record-deleted pruned_${FACE}.txt
 
    # 7. upload products, verify, delete retired objects
-   ./s3_upload_and_prune.sh ${CFG} BUCKET --deleted-list pruned_${FACE}.txt --execute
+   ./s3_upload_and_prune.sh ${CFG} ${BUCKET} --deleted-list pruned_${FACE}.txt --execute
 
    # 8. remove the local copy
    rm -rf "${CFG_OutputPath}/Global_1yr_2025_C36S10_${FACE}"
