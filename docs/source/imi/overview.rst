@@ -181,36 +181,76 @@ Once those checks pass, two things go, both gated identically:
    * - ``jacobian_runs/*/OutputDir/GEOSChem.*.nc4``
      - dated at or before the cutoff
    * - ``jacobian_runs/*/Restarts/gcchem_internal_checkpoint.*.nc4``
-     - all but the newest per run
+     - dated **strictly before** ``S``, and never a run's newest
 
-Checkpoint pruning mirrors ``prune_checkpoints()`` in
-``gchp_ch4_run.template``, which keeps one. It needs no date comparison of its
-own, and this is worth seeing clearly, because the instinct is to add one:
+Why Checkpoints Are Kept From ``S`` Onward
+------------------------------------------
 
-``S`` is the *minimum across runs* of each run's *maximum* checkpoint date, so
-every run satisfies ``max_i >= S`` by construction — and the marker's ``S`` is
-only ever older than the current one, since runs advance. Keeping each run's
-newest checkpoint therefore already guarantees keeping one at or after ``S``,
-in every run. A date gate would retain extra checkpoints on runs that are
-ahead of the others, and protect nothing.
+Checkpoints exist to re-simulate, and re-simulation is the only repair for a
+corrupt ``OutputDir`` file. So which ones to keep follows from which
+``OutputDir`` data has actually been validated.
 
-The checkpoint's existence is itself the statement that everything before it
-was simulated, so one per run carries all the information there is.
-``--keep-checkpoints 2`` holds a fallback; ``0`` skips checkpoint pruning.
+**Dates through** ``S-1`` **were opened during processing.** Overpass sampling
+of local date ``L`` reads ``OutputDir`` for ``L`` and ``L+1`` and runs to
+``L = S-2``, so it touches ``S-1``; the inversion reads granules to ``S-1``
+too. Corruption in that range would already have surfaced. Deleting the
+checkpoints below ``S`` therefore gives up the ability to regenerate only data
+that has been read.
+
+**Dates at or after** ``S`` **were never opened.** They exist only in runs that
+ran ahead of the others, and the prune retains them, since the cutoff is
+``S-2``. Keeping every checkpoint from ``S`` onward is what preserves the
+ability to re-simulate that unvalidated tail.
+
+The rule is *strictly* before ``S``, not at or before, and the difference
+matters. ``S`` is the minimum across runs of each run's maximum, so the slowest
+run's newest checkpoint is dated exactly ``S``. A rule of ``<= S`` would strip
+that run of every checkpoint, and ``get_shared_end_date`` would fall back to
+``StartDate`` and raise — breaking every later run on the face.
+
+With ``S = 20250110``:
+
+.. code-block:: text
+
+  run _0001 (ahead)    20250103 20250106 20250110 20250113 20250116
+    keeps                                20250110 20250113 20250116
+
+  run _0002 (slowest)  20250103 20250106 20250110
+    keeps                                20250110
 
 .. note::
 
-   Keeping at least one per run is what makes this safe.
    ``get_shared_end_date`` reads exactly this file set, taking the maximum per
-   run and the minimum across runs, so removing anything below each maximum
-   leaves ``S`` unchanged. Were that not true, pruning would move the very date
-   every marker and cutoff is pinned to.
+   run and the minimum across runs. Every run's maximum is ``>= S``, so it is
+   always kept and ``S`` is unchanged by pruning. Were that not so, pruning
+   would move the very date every marker and cutoff is pinned to.
 
-Unlike ``OutputDir``, checkpoint pruning is not cutoff-gated: a checkpoint
-newer than the cutoff is removed if a newer one still exists. You keep the
-ability to resume each run *forward* from its newest checkpoint, and lose the
-ability to restart from an intermediate date — which pruning ``OutputDir`` has
-already ruled out anyway.
+``--keep-checkpoints N`` sets how many newest are kept regardless of date
+(default 1); ``0`` disables checkpoint pruning altogether.
+
+Checking ``OutputDir`` Before Pruning
+--------------------------------------
+
+``check_outputdir_integrity.py`` reads every ``OutputDir`` file — opening it,
+finding a float variable, and reading from both ends — and reports any that
+cannot be read. Reading both ends is the point: HDF5 keeps metadata at the
+front, so a truncated file opens cleanly and only fails when a chunk near the
+end is touched.
+
+.. code-block:: bash
+
+   ./check_outputdir_integrity.py ../../configs_C36S10/config_T005.yml > corrupt.txt
+   ./check_outputdir_integrity.py ../../configs_C36S10/config_T005.yml --sample 0.05
+
+It is a readability check, not a completeness one: no NaN scan, no date
+coverage. Run it before pruning, while an earlier checkpoint could still
+repair what it finds. ``--sample`` gives a quick look for systematic damage;
+only a full scan proves every file readable.
+
+Until a face has come through it cleanly, ``--keep-checkpoints 0`` keeps every
+checkpoint. They are one file per run per date, a rounding error beside
+``OutputDir``, and they are the only insurance against corruption that the
+processing steps did not touch.
 
 .. warning::
 
