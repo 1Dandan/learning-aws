@@ -53,8 +53,8 @@ Per target face, under ``OutputPath``:
   ├── inversion/
   │   ├── data_converted/              <- product
   │   └── data_converted_manifest.json
-  ├── .overpass_complete.<StartDate>_S<S>   <- marker
-  └── .inversion_complete.<StartDate>_S<S>  <- marker
+  ├── overpass_complete.<StartDate>_S<S>   <- marker
+  └── inversion_complete.<StartDate>_S<S>  <- marker
 
 The Shared End Date
 -------------------
@@ -75,6 +75,25 @@ Overpass output for local date ``L`` reads ``OutputDir`` for both ``L`` and
 cutoff. Once ``S`` reaches ``EndDate`` there is no further day to wait for, and
 the cutoff becomes ``EndDate-1``.
 
+.. note::
+
+   That reasoning assumes an early-afternoon overpass, which is what makes
+   local date ``L`` fall on UTC ``L`` or ``L+1`` and never earlier. A morning
+   instrument breaks it: the operator sets ``utc_offset = longitude / 15``, so
+   the offset reaches ``+12`` at longitude 180, and ``UTC = local_hour -
+   offset`` lands on the previous day exactly when the overpass is **before
+   12:00**. Covering ``L`` would then need ``L-1``, which a cutoff of ``S-2``
+   has already deleted.
+
+   ``overpass_lookback_days()`` reads ``OverpassTime`` from the config and
+   holds the cutoff back a day when it is before noon — ``S-3`` instead of
+   ``S-2``. TROPOMI's ``13:30`` gives no lookback, so nothing changes for the
+   current runs. An unreadable value assumes morning, because one extra date of
+   ``OutputDir`` per face is cheap and one too few is unrecoverable.
+
+   This preserves the *inputs* only. An operator that actually reads ``L-1``
+   needs ``process_run_day`` extended too; it reads ``L`` and ``L+1`` today.
+
 The inversion is looser: with ``SatDiagOperator: false`` it reads UTC dates up
 to ``S-1``, and its next round starts at ``S``.
 
@@ -91,8 +110,8 @@ successful completion:
 
 .. code-block:: text
 
-  .overpass_complete.20250101_S20250815
-  .inversion_complete.20250101_S20250815
+  overpass_complete.20250101_S20250815
+  inversion_complete.20250101_S20250815
 
 The fields are the configured ``StartDate`` and the shared end date the stage
 ran against. They are **not** a coverage range: overpass output spans local
@@ -164,7 +183,7 @@ than the others'. The expected counts are derived per run rather than assumed
 uniform.
 
 A failure blocks that face and leaves it untouched. A per-face
-``.outputdir_pruned.json`` records what was removed and when, which also makes
+``outputdir_pruned.json`` records what was removed and when, which also makes
 a re-run a no-op.
 
 What Gets Deleted

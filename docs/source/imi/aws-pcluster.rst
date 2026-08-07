@@ -45,8 +45,32 @@ Before the First Prune
    With a ``NEW,CHANGED,DELETED`` autoexport policy, deleting a file on FSx
    propagates the delete to S3, and that is irreversible.
 
-   **Enable S3 bucket versioning with a noncurrent-version expiry first.** A
-   30-day expiry is inexpensive and is the only real undo.
+   **Consider S3 bucket versioning with a short noncurrent-version expiry.**
+   Enabling it costs nothing on existing objects — noncurrent versions appear
+   only when something is deleted or overwritten — so the bill follows the
+   deletion *rate*, not the bucket total. At a few hundred GiB pruned per day
+   against a 3-day expiry, that is tens of dollars for an entire sweep.
+
+   It is the only measure here that protects against a mistake nobody
+   anticipated; every other check catches a failure that was foreseen. Suspend
+   versioning once the results are verified, and the lifecycle rule clears the
+   retained versions within the window.
+
+   .. code-block:: bash
+
+      aws s3api put-bucket-versioning --bucket BUCKET \
+          --versioning-configuration Status=Enabled
+
+      aws s3api put-bucket-lifecycle-configuration --bucket BUCKET \
+          --lifecycle-configuration '{"Rules":[{
+            "ID":"expire-pruned-outputdir","Status":"Enabled",
+            "Filter":{"Prefix":"output/"},
+            "NoncurrentVersionExpiration":{"NoncurrentDays":3},
+            "AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}'
+
+   Confirm the interaction with your DRA on a single face before enabling it
+   bucket-wide: that deletes still propagate, and that a noncurrent version is
+   retained where you expect.
 
 .. note::
 
@@ -63,10 +87,55 @@ Confirm the policy is what you think it is:
        --filters Name=file-system-id,Values=fs-XXXXXXXX \
        --query 'Associations[].{Path:FileSystemPath,S3:DataRepositoryPath,Export:S3.AutoExportPolicy.Events}'
 
-Pruning
--------
+.. _prune-in-job:
 
-Faces are processed by the usual submission workflow
+Pruning Inside the IMI Job
+--------------------------
+
+The simplest arrangement on pcluster: let each IMI job prune its own face when
+it finishes. Set in the config,
+
+.. code-block:: yaml
+
+   PruneOutputDir: true
+
+and ``run_imi.sh`` runs ``src/utilities/prune_outputdir.py`` as its last step,
+after both stages have had their chance to write markers. With autoexport the
+deletes reach S3 by themselves, so nothing else is needed — no separate pass
+over 220 faces, no upload step.
+
+The flag does not weaken any check. The prune still refuses unless an overpass
+and an inversion marker both exist carrying the same ``S``, which happens only
+when both stages completed over a consistent window. **A submission that ran
+only one stage leaves the two disagreeing, and nothing is deleted** — that is
+the check working, so it does not fail the job. The key defaults to ``false``
+when absent, so a config that does not mention it is unaffected.
+
+What it deletes is recorded in ``<run_dirs>/outputdir_pruned_keys.txt``.
+
+.. important::
+
+   Verify the products **before** turning this on, not after. Once a face is
+   pruned, its ``OutputDir`` cannot be rebuilt without re-simulating, so a
+   corrupt overpass file or ``data_converted`` pickle discovered afterwards is
+   not repairable. Run both checkers across every target face first:
+
+   .. code-block:: bash
+
+      for cfg in configs_C36S10/config_T*.yml; do
+          ./src/utilities/check_overpass_complete.py "$cfg"
+          ./src/utilities/check_data_converted.py    "$cfg"
+      done
+
+   Products written since are safe without re-checking: both the overpass
+   diagnostics and the pickles are now written to a temporary file and renamed,
+   so a file bearing its final name is complete.
+
+Pruning by Hand
+---------------
+
+The alternative, if you would rather keep a person in the loop. Faces are
+processed by the usual submission workflow
 (``scripts/submit/batch_submit.sh``), which is unchanged. Once faces carry both
 markers, prune them.
 
@@ -75,7 +144,7 @@ Always start with a dry run across everything:
 .. code-block:: bash
 
    cd scripts/postprocess
-   ./prune_outputdir.py ../../configs_C36S10/config_T*.yml
+   ../../src/utilities/prune_outputdir.py ../../configs_C36S10/config_T*.yml
 
 This reports, per face, either how much would be freed or exactly which check
 blocked it. Nothing is touched.
@@ -84,7 +153,7 @@ Then begin small:
 
 .. code-block:: bash
 
-   ./prune_outputdir.py ../../configs_C36S10/config_T*.yml \
+   ../../src/utilities/prune_outputdir.py ../../configs_C36S10/config_T*.yml \
        --execute --max-faces 5 --retain-days 7 \
        --stop-file /fsx_output/imi-gchp/STOP_PRUNE
 
@@ -92,7 +161,7 @@ Confirm the result, then widen:
 
 .. code-block:: bash
 
-   ./prune_outputdir.py ../../configs_C36S10/config_T*.yml \
+   ../../src/utilities/prune_outputdir.py ../../configs_C36S10/config_T*.yml \
        --execute --max-faces 50 --retain-days 7 \
        --stop-file /fsx_output/imi-gchp/STOP_PRUNE
 
@@ -139,7 +208,7 @@ Each face reports one line:
 
   [PRUNED]  Global_1yr_2025_C36S10_T007: deleted 4218 file(s), 731.4 GiB, dated <= 20250813
   [SKIPPED] Global_1yr_2025_C36S10_T008: already pruned through 20250813
-  [BLOCKED] Global_1yr_2025_C36S10_T009: no .inversion_complete marker
+  [BLOCKED] Global_1yr_2025_C36S10_T009: no inversion_complete marker
 
 A blocked face is left completely untouched; the loop continues. The exit code
 is 2 if any face was blocked, so a wrapper can notice without parsing output.
@@ -164,7 +233,7 @@ Common blocks and what they mean:
 
    * - Message
      - Meaning
-   * - ``no .inversion_complete marker``
+   * - ``no inversion_complete marker``
      - the inversion has not finished for this face
    * - ``markers disagree``
      - one stage has advanced past the other; rerun the lagging one
@@ -181,7 +250,7 @@ Repeat as Runs Advance
 
 ``S`` grows as the Jacobian runs progress. Each processing round pushes the
 markers forward and the cutoff with them, so the prune is worth re-running
-periodically. ``.outputdir_pruned.json`` makes an already-pruned face a no-op,
+periodically. ``outputdir_pruned.json`` makes an already-pruned face a no-op,
 so re-running across every face is cheap.
 
 No Verification Step

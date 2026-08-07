@@ -149,8 +149,16 @@ scripts drive everything:
    cd scripts/postprocess
    ./fetch_from_s3.sh code                  # the imi-gchp tree, incl. GCHP/
    ./fetch_from_s3.sh code --no-gchp        # skip GCHP if the server has one
+   ./fetch_from_s3.sh code --scripts        # only src/ and scripts/postprocess/
    ./fetch_from_s3.sh face T005 --dry-run   # size and free space, no transfer
+   ./fetch_from_s3.sh face T005 --quiet     # errors only, for a short log
    ./fetch_from_s3.sh face T005
+
+``--scripts`` is the one to use for picking up a code change between runs: it
+syncs only ``src/`` and ``scripts/postprocess/`` — a few megabytes rather than
+several gigabytes — and restores the executable bits afterwards, which
+``restore_git_modes.sh`` cannot do for untracked files. It holds back
+``local_env.local.sh``, so this machine's bucket and paths survive the fetch.
 
 Each face reports its remote size against local free space before transferring,
 so a full filesystem surfaces before a multi-hundred-gigabyte copy rather than
@@ -228,7 +236,8 @@ Per face it performs:
      - generate the per-face config and preflight every path
    * - 3
      - verify
-     - check overpass files that came from S3
+     - check overpass files **and** ``data_converted`` pickles that came
+       from S3
    * - 4
      - repair
      - delete what failed, so step 5 regenerates it
@@ -349,18 +358,32 @@ Step 7 uploads an explicit list, not "everything except ``OutputDir``":
   inversion/data_converted/*
   inversion/data_visualization/*
   inversion/data_converted_manifest.json
-  CS_grids/overpass_sample_utc_hour.nc
-  .overpass_complete.*  .inversion_complete.*
-  config_*.yml  imi_output.log  .outputdir_pruned.json
+  CS_grids/*                              (second pass, --size-only)
+  overpass_complete.*  inversion_complete.*
+  config_*.yml  imi_output.log  outputdir_pruned.json
 
 A downloaded file carries a local mtime newer than its S3 object, so a
-whole-face sync would push ``Restarts/``, the rest of ``CS_grids/`` and
-``StateVector.nc`` back into the bucket they came from. Those are already
-archived and are left alone.
+whole-face sync would push ``Restarts/`` and ``StateVector.nc`` back into the
+bucket they came from. Those are already archived and are left alone.
 
 ``CS_grids/overpass_sample_utc_hour.nc`` is the exception worth naming: it is
 built on the first overpass run from an ``OutputDir`` file the prune later
 deletes, so once a face is fully pruned it cannot be regenerated.
+
+The rest of ``CS_grids/`` goes up in a second pass using ``--size-only``. It all
+came down from the bucket, so every local copy has a newer mtime and a normal
+sync would re-upload the lot on every face; comparing size alone uploads only
+what actually differs — which is exactly the weight files the operator had to
+rebuild, since a truncated file and a good one differ in length. Uploading them
+means a repair is not repeated on every fetch.
+
+.. warning::
+
+   A weight file damaged in transit *down* that the run never read was never
+   validated, and being a different size from the object it came from, it would
+   be uploaded over a good copy. Without bucket versioning that is not
+   reversible. The exposure is narrow — every weight file the run does read is
+   validated and rebuilt by ``read_regrid_weights`` — but it is not zero.
 
 Manual: Step by Step
 --------------------
@@ -384,17 +407,21 @@ first four lines do:
    # 2. generate the config and preflight paths
    ./run_face_local.sh ${FACE} --dry-run
 
-   # 3. verify overpass data that round-tripped through S3
-   ./check_overpass_complete.py ${CFG} > bad_${FACE}.txt
+   # 3. verify what round-tripped through S3; both append to one list,
+   #    because the repair is the same deletion
+   ../../src/utilities/check_overpass_complete.py ${CFG} >  bad_${FACE}.txt
+   ../../src/utilities/check_data_converted.py    ${CFG} >> bad_${FACE}.txt
 
-   # 4. delete what failed
+   # 4. delete what failed, and retire the marker of whichever stage lost files
    ./delete_files_from_list.sh bad_${FACE}.txt --execute
+   grep -q /OverpassDiagnostics/     bad_${FACE}.txt && rm -f <run_dirs>/overpass_complete.*
+   grep -q /inversion/data_converted/ bad_${FACE}.txt && rm -f <run_dirs>/inversion_complete.*
 
    # 5. process; writes both markers and the manifest on success
    ./run_face_local.sh ${FACE}
 
    # 6. prune locally, recording what went
-   ./prune_outputdir.py ${CFG} --execute --record-deleted pruned_${FACE}.txt
+   ../../src/utilities/prune_outputdir.py ${CFG} --execute --record-deleted pruned_${FACE}.txt
 
    # 7. upload products, verify, delete retired objects
    ./s3_upload_and_prune.sh ${CFG} ${BUCKET} --deleted-list pruned_${FACE}.txt --execute
