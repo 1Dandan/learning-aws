@@ -117,10 +117,79 @@ commands delete things. Check it arrived before relying on it::
 An empty result means ``local_env.local.sh`` is missing or does not set
 ``S3_BUCKET`` — see :ref:`one-time-configuration`.
 
-``BUCKET`` is only needed for the scripts that take it as an argument.
-``process_face_cycle.sh`` falls back to ``S3_BUCKET`` when the argument is
-omitted, and ``fetch_from_s3.sh`` reads it from there always — so on a
-configured machine the bucket usually need not be given at all.
+``BUCKET`` need not be given at all on a configured machine. Every script
+sources ``local_env.sh`` before deciding, so ``S3_BUCKET`` supplies it:
+
+.. code-block:: bash
+
+   ./process_face_cycle.sh T001 --execute            # same as passing it
+
+``process_face_cycle.sh`` also tests whether its first argument *looks like a
+face* (``T001``, ``1``) before treating it as a bucket, so an empty ``${BUCKET}``
+collapsing on expansion cannot shift the arguments along — which is how a
+missing bucket used to surface as a complaint about an unrelated filename.
+
+Passing one explicitly overrides ``S3_BUCKET``, which is useful for a one-off
+against a different bucket but means a typo silently wins.
+
+Optional Settings
+-----------------
+
+All in ``local_env.sh``, or ``local_env.local.sh`` to keep them off the
+repository.
+
+**Skipping verification on a marked face.** Step 3 reads every overpass file
+and every pickle, which is the most expensive thing the cycle does after the
+transfers. A completion marker is only written by the current code, which
+writes each file to a temporary name and renames it — so a file bearing its
+final name under a marker cannot be partial, and checking it again confirms
+what is already established.
+
+.. code-block:: bash
+
+   VERIFY_IF_MARKED="false"   # default: skip a marked face
+   VERIFY_IF_MARKED="true"    # check regardless
+
+.. warning::
+
+   A marker attests that the stage **finished**, not that every file under it
+   was written atomically — neither producer rewrites a file it finds already
+   present. And the marker travels with the data, so it says nothing about
+   whether the transfer from S3 was clean, which is a different failure and the
+   one that produced a truncated regridding weight file.
+
+   What makes skipping safe is having verified every face **once** beforehand.
+   After that, a file present is either already checked or newly written.
+
+**Running the heavy steps on a compute node.** Steps 1, 3 and 7 move bytes;
+the rest are light. On a login node the first three are what you want elsewhere.
+
+.. code-block:: bash
+
+   SLURM_STEPS="1 3 7"
+   SLURM_STEP_CPUS="4"
+   SLURM_STEP_MEM="16G"
+   SLURM_STEP_TIME="0-6:00"
+   SLURM_STEP_PARTITION="shared,unrestricted"
+
+Each step is submitted with ``sbatch -W`` and waited on, so the cycle blocks
+exactly as before. ``run_on_slurm.sh`` keeps stdout as stdout and stderr as
+stderr, which matters because ``check_overpass_complete.py`` writes the paths
+to delete on the first and its report on the second.
+
+Only correct where compute nodes can reach S3. Check before enabling:
+
+.. code-block:: bash
+
+   srun -p shared -t 5 --pty bash -c \
+       'source ~/.bashrc; conda activate aws; aws s3 ls s3://BUCKET/ | head -3'
+
+**Verification tuning.**
+
+.. code-block:: bash
+
+   CHECK_WORKERS="4"     # parallel readers
+   CHECK_TIMEOUT="600"   # seconds before one file's read is abandoned
 
 Fetching From S3
 ----------------
@@ -163,6 +232,17 @@ several gigabytes — and restores the executable bits afterwards, which
 Each face reports its remote size against local free space before transferring,
 so a full filesystem surfaces before a multi-hundred-gigabyte copy rather than
 during one.
+
+.. warning::
+
+   Face transfers pass ``--no-follow-symlinks`` and exclude ``satellite_data``.
+   Both matter. ``satellite_data`` is a link to the whole TROPOMI archive, and
+   without the first flag ``aws s3 sync`` walks the destination *through* it,
+   comparing hundreds of thousands of files it will never transfer — and
+   aborting with ``File does not exist`` when one moves mid-walk. The exclude
+   then stops the 26-byte link object being written onto a symlink that points
+   at a directory. Nothing is stored under that prefix in S3; ``run_imi.sh``
+   recreates the link from ``DataPathTROPOMI``.
 
 Nothing needs pushing back to run a face — the flow into this machine is
 one-directional. ``push_code_to_s3.sh`` exists for the reverse case: you edited
@@ -236,8 +316,8 @@ Per face it performs:
      - generate the per-face config and preflight every path
    * - 3
      - verify
-     - check overpass files **and** ``data_converted`` pickles that came
-       from S3
+     - check overpass files and ``data_converted`` pickles that came from S3 —
+       each skipped when its completion marker is present
    * - 4
      - repair
      - delete what failed, so step 5 regenerates it
@@ -360,7 +440,7 @@ Step 7 uploads an explicit list, not "everything except ``OutputDir``":
   inversion/data_converted_manifest.json
   CS_grids/*                              (second pass, --size-only)
   overpass_complete.*  inversion_complete.*
-  config_*.yml  imi_output.log  outputdir_pruned.json
+  imi_output.log  outputdir_pruned.json
 
 A downloaded file carries a local mtime newer than its S3 object, so a
 whole-face sync would push ``Restarts/`` and ``StateVector.nc`` back into the
@@ -384,6 +464,82 @@ means a repair is not repeated on every fetch.
    be uploaded over a good copy. Without bucket versioning that is not
    reversible. The exposure is narrow — every weight file the run does read is
    validated and rebuilt by ``read_regrid_weights`` — but it is not zero.
+
+.. _many-faces:
+
+Many Faces at Once
+------------------
+
+``run_face_batch.sh`` keeps several cycles running and starts another as each
+one finishes, until every face is done.
+
+.. code-block:: bash
+
+   cd scripts/postprocess
+
+   # look first: steps 1-3 per face, nothing deleted
+   ./run_face_batch.sh --faces 1-3 --concurrency 2
+
+   # then in the background
+   nohup ./run_face_batch.sh --faces 1-220 --skip T005 --concurrency 10 \
+         --execute --stop-file "$PWD/STOP_BATCH" > /dev/null 2>&1 &
+
+   tail -f ../../logs_C36S10/run_face_batch_*.log
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Control
+     - Effect
+   * - ``--concurrency 10``
+     - cycles running at once
+   * - ``--budget-tib 30``
+     - ceiling on face data resident on disk
+   * - ``--skip T005``
+     - hold a face back; takes ``5``, ``T5`` or ``T005``
+   * - ``--halt-on-failure``
+     - stop starting new faces after the first failure
+   * - ``--retry-failed``
+     - re-attempt faces previously recorded as failed
+   * - ``--stop-file PATH``
+     - stop launching; running faces finish
+
+Progress is recorded per face in ``logs_C36S10/face_batch_state.tsv``, so
+re-running the same command resumes rather than reprocessing. A failed face is
+recorded and the run moves on.
+
+**The budget is measured, not accumulated.** It sums the face directories
+actually on disk, because step 8 removes a face only when it succeeded — a
+failed one still occupies its space, as does one left by an earlier run. If
+failures fill the budget the driver reports ``STALLED`` and exits rather than
+overflowing.
+
+Several cycles coexist because each takes a **per-face lock**; two cycles on
+the same face still refuse, since they would regenerate one config and prune
+one directory against each other.
+
+Stopping
+--------
+
+.. code-block:: bash
+
+   ./stop_processing.sh                  # show what is running, change nothing
+   ./stop_processing.sh --graceful       # stop between faces
+   ./stop_processing.sh --now            # signal every process group
+   ./stop_processing.sh --now --cancel-jobs
+
+``--graceful`` reads each ``--stop-file`` from the PID files and touches it, so
+running faces finish cleanly. ``--now`` signals **process groups**, so the
+python readers, the aws transfers and the waiting ``sbatch`` go too rather than
+being orphaned; it skips its own group, since a driver started without job
+control shares the pgid of whatever launched it.
+
+.. important::
+
+   Slurm jobs are **not** cancelled unless you pass ``--cancel-jobs``. Killing a
+   waiting ``sbatch -W`` only stops the waiter — the job keeps running. The
+   script lists the jobs and prints the ``scancel`` command either way.
 
 Manual: Step by Step
 --------------------

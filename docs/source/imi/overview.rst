@@ -97,6 +97,38 @@ the cutoff becomes ``EndDate-1``.
 The inversion is looser: with ``SatDiagOperator: false`` it reads UTC dates up
 to ``S-1``, and its next round starts at ``S``.
 
+Which Granules a Round Takes
+----------------------------
+
+A granule is selected on the **start time** in its filename, but it spans about
+an hour and a half — so one starting on date ``D`` carries observations into
+``D+1``, and whatever the operator reads for ``D+1`` has to exist:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 32 68
+
+   * - ``SatDiagOperator``
+     - what ``D+1`` needs
+   * - ``false``
+     - ``OutputDir``, which reaches ``S-1``
+   * - ``true``
+     - an overpass file, which reaches ``S-2``
+
+Either way a granule dated ``S-1`` can ask for a day that is not there yet, so
+the bound is ``S-2`` and those granules are **deferred**. Nothing is lost: ``S``
+advances as the simulations do, and they are taken up then.
+
+Once ``S`` reaches ``EndDate`` there is no further day coming, so the bound
+relaxes to ``EndDate-1`` rather than dropping the last day for good. The
+observations that spill past ``EndDate`` are then discarded explicitly, with a
+count logged — the one case where no ``OutputDir`` file can ever exist, since
+``EndDate`` is exclusive.
+
+This is easy to miss because it is data-dependent: it only bites when a
+boundary granule actually crosses UTC midnight *and* carries usable
+observations afterwards.
+
 ``S`` tracks *progress*, not *intent*. It can exceed ``EndDate`` if ``EndDate``
 is lowered below what has already been simulated, so a sub-range inversion of a
 complete ensemble needs a reworked precomputed-Jacobian path rather than a
