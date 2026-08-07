@@ -440,11 +440,21 @@ Step 7 uploads an explicit list, not "everything except ``OutputDir``":
   inversion/data_converted_manifest.json
   CS_grids/*                              (second pass, --size-only)
   overpass_complete.*  inversion_complete.*
-  imi_output.log  outputdir_pruned.json
+  outputdir_pruned.json
 
 A downloaded file carries a local mtime newer than its S3 object, so a
 whole-face sync would push ``Restarts/`` and ``StateVector.nc`` back into the
 bucket they came from. Those are already archived and are left alone.
+
+``config_*.yml`` and ``imi_output.log`` are excluded for a sharper reason. Both
+describe *this* machine, and both already exist in the bucket describing the
+pcluster run that produced the archived output — uploading either replaces a
+record of what made the data with a record of what last touched it.
+
+Neither is lost. The configs live under the code prefix in ``configs_C36S10/``,
+and ``run_face_local.sh`` tees the same output ``run_imi.sh`` writes to
+``imi_output.log`` into ``logs_C36S10/imi_output_C36S10_T0XX.log``, which sits
+outside the face directory and so survives step 8 removing it.
 
 ``CS_grids/overpass_sample_utc_hour.nc`` is the exception worth naming: it is
 built on the first overpass run from an ``OutputDir`` file the prune later
