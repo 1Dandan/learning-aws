@@ -3,6 +3,21 @@
 Running on a Local Server
 ==========================
 
+.. danger::
+
+   **Downloading face data out of S3 costs about $0.09 per GB.** A single face
+   is 100-1800 GiB, so one face is roughly $9-160 and a 220-face campaign is
+   several thousand dollars. The charge is for egress to the internet, and it
+   applies every time a face is fetched -- including retries after a failed
+   run.
+
+   **Do the postprocessing on AWS instead**, where FSx for Lustre reads the
+   same bucket in-region at no egress charge. See :ref:`imi-pruning-aws`.
+
+   This page is kept for the case where AWS is genuinely unavailable, or for a
+   handful of faces where the cost is understood and accepted. Read
+   :ref:`imi-egress-cost` before starting.
+
 Processing faces one at a time on a machine with limited disk, working from
 data held in S3. Each face is downloaded, processed, pruned, pushed back, and
 then removed locally before the next one starts, so only one face is ever on

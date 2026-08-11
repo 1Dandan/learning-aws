@@ -6,6 +6,12 @@ Concepts: Markers, Cutoff, and Why Pruning Is Safe
 This page explains *why* the procedure works. The step-by-step instructions are
 separate: :ref:`imi-pruning-local` and :ref:`imi-pruning-aws`.
 
+.. danger::
+
+   Run the postprocessing **on AWS**, not on a local server. Pulling face data
+   out of S3 to a machine outside AWS is charged at about $0.09 per GB, which
+   is thousands of dollars across 220 faces. See :ref:`imi-egress-cost`.
+
 The Problem
 -----------
 
@@ -34,6 +40,54 @@ faces by hand, that deleting is safe.
 
    ``OutputDir`` cannot be regenerated without re-running the GEOS-Chem
    simulations. Every deletion is permanent.
+
+.. _imi-egress-cost:
+
+Where the Postprocessing Should Run
+-----------------------------------
+
+The data never has to leave AWS, and it is expensive when it does.
+
+S3 charges for **egress to the internet** at roughly $0.09 per GB. Reads from
+the same region -- an EC2 instance, or FSx for Lustre linked to the bucket --
+are not charged that way. So the same processing costs nothing in transfer on
+pcluster and thousands of dollars on a machine elsewhere.
+
+Against the face sizes in this campaign:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 30 30
+
+   * - Scope
+     - Data pulled
+     - Approximate egress cost
+   * - One median face (646 GiB)
+     - 0.65 TB
+     - ~$58
+   * - One large face (1792 GiB)
+     - 1.8 TB
+     - ~$160
+   * - All 220 faces
+     - ~151 TB
+     - **~$14,000**
+
+Two things make it worse than the table suggests. A face that fails partway is
+usually re-fetched, and the charge applies again. And the download is the slow
+step -- roughly 77 MiB/s per node in practice -- so the money buys latency
+rather than saving it.
+
+On AWS the same work reads through FSx for Lustre with a data repository
+association pointing at the bucket. With a ``NEW,CHANGED,DELETED`` autoexport
+policy the postprocessing needs no transfer step at all: ``prune_outputdir.py``
+deletes the file on FSx and the deletion propagates to S3 on its own. That is
+why :ref:`imi-pruning-aws` has no upload or object-deletion step, while
+:ref:`imi-pruning-local` needs ``s3_upload_and_prune.sh`` to do by hand what
+the filesystem does for free.
+
+The local-server route remains documented for the case where AWS is not
+available, or for a few faces where the cost is understood. It is not the
+default.
 
 Directory Layout
 ----------------
